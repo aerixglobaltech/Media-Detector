@@ -108,9 +108,11 @@ class VideoStream:
             ok, frame = self._ok, self._latest_frame
 
         if not ok or frame is None:
-            log.warning("Lost connection to %s – attempting reconnect", self.source)
+            # If it's a webcam (int) that failed, do not aggressively spam the logs trying to reconnect
+            delay = 30.0 if isinstance(self.source, int) else self.reconnect_delay
+            log.warning("Lost connection to %s – attempting reconnect in %ss", self.source, delay)
             self.release()
-            time.sleep(self.reconnect_delay)
+            time.sleep(delay)
             self._open()
             return False, None
 
