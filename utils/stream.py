@@ -43,17 +43,22 @@ class VideoStream:
         self.reconnect_delay = reconnect_delay
 
         self._cap: cv2.VideoCapture | None = None
+        
+        import threading
+        self._lock = threading.Lock()
+        self._stop_event = threading.Event()
+        self._thread = None
+        self._latest_frame = None
+        self._ok = False
+        
         self._open()
 
     # ------------------------------------------------------------------
     def _open(self) -> None:
         if self._cap is not None:
-            self._cap.release()
+            self.release()
 
         src = self.source
-
-        # For HLS (.m3u8) and RTSP streams, force the FFMPEG backend.
-        # Without this, Windows picks a backend that cannot decode video.
         is_url = isinstance(src, str) and (
             src.startswith("rtsp://")
             or src.startswith("http://")
@@ -70,39 +75,53 @@ class VideoStream:
             self._cap.set(cv2.CAP_PROP_FRAME_WIDTH,  self.width)
             self._cap.set(cv2.CAP_PROP_FRAME_HEIGHT, self.height)
             self._cap.set(cv2.CAP_PROP_FPS,          self.target_fps)
-            self._cap.set(cv2.CAP_PROP_BUFFERSIZE,   2)   # low latency
-            log.info("Stream opened: %s", src)
+            self._cap.set(cv2.CAP_PROP_BUFFERSIZE,   1)   # absolute lowest latency
+            
+            # Start the frame-purging background thread
+            self._stop_event.clear()
+            self._thread = threading.Thread(target=self._update, daemon=True, name="VideoStream")
+            self._thread.start()
+            
+            log.info("Stream opened (Threaded): %s", src)
         else:
             log.warning("Failed to open stream: %s", src)
 
-
+    # ------------------------------------------------------------------
+    def _update(self):
+        """Background thread that constantly reads frames to prevent lagging behind."""
+        while not self._stop_event.is_set():
+            if self._cap is None or not self._cap.isOpened():
+                break
+            # Blocking read inside the thread
+            ok, frame = self._cap.read()
+            with self._lock:
+                self._ok = ok
+                self._latest_frame = frame
+            # If the camera drops, standard read logic handles reconnect
+            if not ok:
+                break
+                
     # ------------------------------------------------------------------
     def read(self) -> tuple[bool, np.ndarray | None]:
-        """
-        Read one frame, attempting reconnect if the stream dropped.
+        """Grab the absolute most recent frame dynamically."""
+        with self._lock:
+            ok, frame = self._ok, self._latest_frame
 
-        Returns
-        -------
-        ok    : bool
-        frame : BGR ndarray or None
-        """
-        if self._cap is None or not self._cap.isOpened():
-            log.info("Reconnecting to %s …", self.source)
-            time.sleep(self.reconnect_delay)
-            self._open()
-            return False, None
-
-        ok, frame = self._cap.read()
         if not ok or frame is None:
-            log.warning("Lost frame from %s – attempting reconnect", self.source)
+            log.warning("Lost connection to %s – attempting reconnect", self.source)
+            self.release()
             time.sleep(self.reconnect_delay)
             self._open()
             return False, None
 
-        return True, frame
+        return True, frame.copy()
 
     # ------------------------------------------------------------------
     def release(self) -> None:
+        self._stop_event.set()
+        if self._thread and self._thread.is_alive():
+            self._thread.join(timeout=2.0)
+        
         if self._cap is not None:
             self._cap.release()
             self._cap = None
