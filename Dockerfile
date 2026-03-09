@@ -30,7 +30,10 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Set cache directories for large models out of the root directory
 ENV DEEPFACE_HOME=/app/.cache
 ENV TORCH_HOME=/app/.cache
-ENV YOLO_CONFIG_DIR=/app/.cache
+ENV YOLO_CONFIG_DIR=/tmp/Ultralytics
+
+RUN mkdir -p /app/.cache && chmod 777 /app/.cache && \
+    mkdir -p /tmp/Ultralytics && chmod 777 /tmp/Ultralytics
 
 # Copy the rest of the application code
 COPY . .
