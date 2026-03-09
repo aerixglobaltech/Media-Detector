@@ -61,6 +61,13 @@ log = logging.getLogger("app")
 
 # ─── Data classes ─────────────────────────────────────────────────────────────
 
+# Global Toggles for UI Control
+AI_TOGGLES = {
+    "person": True,
+    "action": True,
+    "emotion": True,
+}
+
 @dataclass
 class TrackResult:
     track_id:      int
@@ -77,7 +84,6 @@ class AIResult:
     tracks:      list[TrackResult] = field(default_factory=list)
     timestamp:   float             = field(default_factory=time.monotonic)
     fps:         float             = 0.0
-
 
 # ─── Scale helper ─────────────────────────────────────────────────────────────
 
@@ -179,11 +185,17 @@ class AIPipeline(threading.Thread):
         if not motion and not in_cooldown:
             return AIResult(motion=False, motion_mask=mask, tracks=[])
 
-        if self._frame_idx % cfg.YOLO_SKIP_FRAMES == 0:
-            self._last_detections = self.person_det.detect(ai_frame)
+        if AI_TOGGLES["person"]:
+            if self._frame_idx % cfg.YOLO_SKIP_FRAMES == 0:
+                self._last_detections = self.person_det.detect(ai_frame)
+        else:
+            self._last_detections = []
 
-        if self._frame_idx % 5 == 0 and cfg.DETECTION_MODE == "action_only":
-            self._last_objects = self.person_det.detect_objects(ai_frame)
+        if AI_TOGGLES["action"]:
+            if self._frame_idx % 5 == 0:
+                self._last_objects = self.person_det.detect_objects(ai_frame)
+        else:
+            self._last_objects = {"food": [], "phone": []}
 
         raw_tracks = self.tracker.update(self._last_detections, ai_frame)
         active_ids = {t.track_id for t in raw_tracks}
@@ -191,7 +203,6 @@ class AIPipeline(threading.Thread):
             self._last_motion_time = now
 
         track_results: list[TrackResult] = []
-        mode = cfg.DETECTION_MODE
 
         for track in raw_tracks:
             tid  = track.track_id
@@ -199,21 +210,18 @@ class AIPipeline(threading.Thread):
             bx1, by1, bx2, by2 = (max(0, int(v)) for v in bbox)
             bx2 = min(ai_w, bx2); by2 = min(ai_h, by2)
 
-            if mode == "yolo_only":
-                track_results.append(TrackResult(
-                    track_id=tid, bbox_full=_scale_box(bbox, sx, sy),
-                    face_bbox_full=None, emotion="", action="",
-                ))
-                continue
+            action = ""
+            emotion = ""
+            face_bbox_full = None
 
-            if mode == "action_only":
+            if AI_TOGGLES["action"]:
                 bw = max(1, bx2 - bx1); bh = max(1, by2 - by1)
                 ratio = bw / bh
                 if ratio > 1.4:   geometry_label = "😴 sleeping"
                 elif ratio > 0.85: geometry_label = "🪑 sitting"
                 else:              geometry_label = "🧍 standing"
 
-                person_crop    = ai_frame[by1:by2, bx1:bx2]
+                person_crop = ai_frame[by1:by2, bx1:bx2]
                 slowfast_label = self.action_det.update(tid, person_crop) if person_crop.size > 0 else ""
 
                 def _overlaps(ob, pb, exp=40):
@@ -230,31 +238,16 @@ class AIPipeline(threading.Thread):
                 elif slowfast_label and any(t in slowfast_label for t in TAGS): action = slowfast_label
                 else:           action = geometry_label
 
+            if AI_TOGGLES["emotion"]:
+                person_crop = ai_frame[by1:by2, bx1:bx2]
                 if person_crop.size > 0:
                     self._submit_emotion(person_crop, tid)
                 emotion = self.emotion_det._cache.get(tid, "")
 
-                track_results.append(TrackResult(
-                    track_id=tid, bbox_full=_scale_box(bbox, sx, sy),
-                    face_bbox_full=None, emotion=emotion, action=action,
-                ))
-                continue
-
-            # Full mode
-            face_bb = self.face_det.detect_in_crop(ai_frame, bbox)
-            if face_bb is not None:
-                fx1, fy1, fx2, fy2 = (max(0, int(v)) for v in face_bb)
-                fc = ai_frame[fy1:min(ai_h,fy2), fx1:min(ai_w,fx2)]
-                if fc.size > 0:
-                    self._submit_emotion(fc, tid)
-            emotion = self.emotion_det._cache.get(tid, "")
-
-            pc = ai_frame[by1:by2, bx1:bx2]
-            action = self.action_det.update(tid, pc) if pc.size > 0 else "N/A"
             track_results.append(TrackResult(
                 track_id=tid,
                 bbox_full=_scale_box(bbox, sx, sy),
-                face_bbox_full=_scale_box(face_bb, sx, sy) if face_bb else None,
+                face_bbox_full=face_bbox_full,
                 emotion=emotion, action=action,
             ))
 
@@ -554,6 +547,16 @@ def api_stats():
     return jsonify(cam_mgr.get_stats())
 
 
+@app.route("/api/toggles", methods=["GET", "POST"])
+def api_toggles():
+    if request.method == "POST":
+        data = request.get_json(force=True)
+        if "person" in data: AI_TOGGLES["person"] = bool(data["person"])
+        if "action" in data: AI_TOGGLES["action"] = bool(data["action"])
+        if "emotion" in data: AI_TOGGLES["emotion"] = bool(data["emotion"])
+    return jsonify(AI_TOGGLES)
+
+
 @app.route("/video_feed")
 def video_feed():
     def generate():
@@ -575,5 +578,5 @@ if __name__ == "__main__":
     # Get port from environment variable (Useful for Railway)
     port = int(os.environ.get("PORT", 5000))
     
-    log.info(f"Starting AI CCTV Web UI on http://0.0.0.0:{port} using Waitress")
+    log.info(f"Starting MACHINE CONTROLLER Web UI on http://localhost:{port}")
     serve(app, host="0.0.0.0", port=port)
