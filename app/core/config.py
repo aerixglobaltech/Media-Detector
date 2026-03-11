@@ -24,7 +24,8 @@ MOTION_VAR_THRESHOLD: float = 12.0  # lower = more sensitive
 MOTION_COOLDOWN_SEC: float = 30.0
 
 # ─── Person Detection (YOLOv8) ─────────────────────────────────────────────
-YOLO_MODEL:       str   = "yolov8n.pt"
+import os
+YOLO_MODEL:       str   = os.path.join("data", "models", "yolov8n.pt")
 YOLO_CONF:        float = 0.30          # lower = detects people in tricky lighting
 YOLO_DEVICE:      str   = "cpu"          # change to "cuda" if GPU PyTorch installed
 YOLO_SKIP_FRAMES: int   = 1              # run YOLO every frame for max stability

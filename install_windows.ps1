@@ -154,9 +154,9 @@ if ($exists.Trim() -ne "1") {
 $env:PGPASSWORD = $null
 
 # Seed default admin user in users table
-if (Test-Path "scripts\seed_admin.py") {
+if (Test-Path "scripts\init_db.py") {
   Write-Host "Seeding default admin user..."
-  python scripts\seed_admin.py
+  python scripts\init_db.py
 }
 
 Write-Host "--------------------------------------------------------"
@@ -165,5 +165,5 @@ Write-Host "Database URL saved to .env as DATABASE_URL."
 Write-Host "--------------------------------------------------------"
 Write-Host "To run the system:"
 Write-Host "1. Activate venv: .\venv\Scripts\Activate.ps1"
-Write-Host "2. Start Web UI: python app.py"
+Write-Host "2. Start Web UI: python run.py"
 Write-Host "--------------------------------------------------------"
