@@ -60,7 +60,7 @@ The system uses **PostgreSQL**. Ensure `DATABASE_URL` is set in `.env` (the inst
     ```
 2.  **Launch Web UI:**
     ```powershell
-    python app.py
+    python run.py
     ```
 3.  **Access Dashboard:** Open your browser to `http://localhost:5000`
 
