@@ -87,15 +87,63 @@ def init_db() -> None:
         conn = get_db_connection()
         cur  = conn.cursor()
 
+        # Roles Table (RBAC)
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS roles (
+                id          SERIAL PRIMARY KEY,
+                name        VARCHAR(100) UNIQUE NOT NULL,
+                description TEXT,
+                permissions JSONB DEFAULT '{}',
+                is_system   BOOLEAN DEFAULT FALSE
+            )
+        """)
+
         # User Table
         cur.execute("""
             CREATE TABLE IF NOT EXISTS users (
                 email         VARCHAR(255) PRIMARY KEY,
                 name          VARCHAR(255) NOT NULL,
                 company       VARCHAR(255) NOT NULL,
-                password_hash TEXT NOT NULL
+                password_hash TEXT NOT NULL,
+                role_id       INTEGER,
+                phone         VARCHAR(50),
+                status        VARCHAR(50) DEFAULT 'active',
+                avatar        TEXT,
+                last_login    TIMESTAMP,
+                created_at    TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
         """)
+
+        # Ensure Role foreign key and other columns exist (for existing tables)
+        try:
+            cur.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS role_id INTEGER REFERENCES roles(id)")
+            cur.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS phone VARCHAR(50)")
+            cur.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS status VARCHAR(50) DEFAULT 'active'")
+            cur.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS avatar TEXT")
+            cur.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS last_login TIMESTAMP")
+            cur.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP")
+        except Exception: pass
+
+        # Seed Default Roles
+        cur.execute("SELECT COUNT(*) FROM roles")
+        if cur.fetchone()['count'] == 0:
+            print(">>> SEEDING: Default Roles")
+            default_roles = [
+                ('Administrator', 'Full system access', '{"all": true}', True),
+                ('Manager', 'Management access', '{"cameras_view": true, "cameras_edit": true, "staff_view": true, "staff_edit": true}', False),
+                ('User', 'Standard access', '{"cameras_view": true, "staff_view": true}', False)
+            ]
+            for r_name, r_desc, r_perms, r_sys in default_roles:
+                cur.execute(
+                    "INSERT INTO roles (name, description, permissions, is_system) VALUES (%s, %s, %s, %s)",
+                    (r_name, r_desc, r_perms, r_sys)
+                )
+
+        # Assign Default Role (Administrator) to any user without a role
+        cur.execute("SELECT id FROM roles WHERE name = 'Administrator'")
+        admin_role = cur.fetchone()
+        if admin_role:
+            cur.execute("UPDATE users SET role_id = %s WHERE role_id IS NULL", (admin_role['id'],))
 
         # Cameras Table
         cur.execute("""
@@ -131,10 +179,10 @@ def init_db() -> None:
         try:
             cur.execute("ALTER TABLE staff_profiles ADD COLUMN IF NOT EXISTS status VARCHAR(50) DEFAULT 'active'")
             cur.execute("ALTER TABLE staff_profiles ADD COLUMN IF NOT EXISTS communication TEXT")
-        except: pass
+        except Exception: pass
 
         conn.commit()
-        log.info("PostgreSQL database initialized successfully.")
+        log.info("PostgreSQL database initialized with RBAC support.")
     except Exception as e:
         log.error("Database initialization failed: %s", e)
         print(f"DATABASE ERROR: {e}")

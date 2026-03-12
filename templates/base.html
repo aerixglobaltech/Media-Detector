@@ -33,11 +33,26 @@
       </div>
 
       <div class="nav-tabs">
-        {{ nav_tab('Dashboard', '📊', active=(active_page == 'dashboard'), url='/') }}
-        {{ nav_tab('Live View', '📡', active=(active_page == 'live'), url='/live') }}
-        {{ nav_tab('Attendance', '📅', active=(active_page == 'attendance'), url='/attendance') }}
-        {{ nav_tab('Reports', '📋', active=(active_page == 'reports'), url='/reports') }}
-        {{ nav_tab('Settings', '⚙️', active=(active_page == 'settings'), url='/settings') }}
+        {% set perms = user_permissions|default({}) %}
+        {% if perms.all or perms.dashboard_view or perms is not defined or not perms %}
+          {{ nav_tab('Dashboard', '📊', active=(active_page == 'dashboard'), url='/') }}
+        {% endif %}
+
+        {% if perms.all or perms.cameras_view or perms is not defined or not perms %}
+          {{ nav_tab('Live View', '📡', active=(active_page == 'live'), url='/live') }}
+        {% endif %}
+
+        {% if perms.all or perms.attendance_view or perms is not defined or not perms %}
+          {{ nav_tab('Attendance', '📅', active=(active_page == 'attendance'), url='/attendance') }}
+        {% endif %}
+
+        {% if perms.all or perms.reports_view or perms is not defined or not perms %}
+          {{ nav_tab('Reports', '📋', active=(active_page == 'reports'), url='/reports') }}
+        {% endif %}
+
+        {% if perms.all or perms.settings_view or perms is not defined or not perms %}
+          {{ nav_tab('Settings', '⚙️', active=(active_page == 'settings'), url='/settings') }}
+        {% endif %}
       </div>
 
       <div style="flex-grow: 1;"></div>

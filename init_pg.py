@@ -13,16 +13,58 @@ if url and "postgres" in url:
         conn = psycopg2.connect(url)
         cur = conn.cursor()
         
-        # Create Tables
-        print("Creating table: users")
+        # Roles Table (RBAC)
+        print("Creating table: roles")
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS roles (
+                id          SERIAL PRIMARY KEY,
+                name        VARCHAR(100) UNIQUE NOT NULL,
+                description TEXT,
+                permissions JSONB DEFAULT '{}',
+                is_system   BOOLEAN DEFAULT FALSE
+            )
+        """)
+
+        # User Table
+        print("Creating/Updating table: users")
         cur.execute("""
             CREATE TABLE IF NOT EXISTS users (
                 email         VARCHAR(255) PRIMARY KEY,
                 name          VARCHAR(255) NOT NULL,
                 company       VARCHAR(255) NOT NULL,
-                password_hash TEXT NOT NULL
+                password_hash TEXT NOT NULL,
+                role_id       INTEGER REFERENCES roles(id),
+                phone         VARCHAR(50),
+                status        VARCHAR(50) DEFAULT 'active',
+                avatar        TEXT,
+                last_login    TIMESTAMP,
+                created_at    TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
         """)
+
+        # Ensure Role columns exist (for migration)
+        try:
+            cur.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS role_id INTEGER REFERENCES roles(id)")
+            cur.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS phone VARCHAR(50)")
+            cur.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS status VARCHAR(50) DEFAULT 'active'")
+            cur.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS avatar TEXT")
+            cur.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS last_login TIMESTAMP")
+            cur.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP")
+        except: pass
+
+        # Seed Default Roles
+        cur.execute("SELECT COUNT(*) FROM roles")
+        if cur.fetchone()[0] == 0:
+            print("Seeding default roles...")
+            cur.execute("INSERT INTO roles (name, description, permissions, is_system) VALUES ('Administrator', 'Full system access', '{\"all\": true}', true)")
+            cur.execute("INSERT INTO roles (name, description, permissions, is_system) VALUES ('Manager', 'Management access', '{\"cameras_view\": true, \"cameras_edit\": true, \"staff_view\": true, \"staff_edit\": true}', false)")
+            cur.execute("INSERT INTO roles (name, description, permissions, is_system) VALUES ('User', 'Standard access', '{\"cameras_view\": true, \"staff_view\": true}', false)")
+
+        # Assign Default Role (Administrator) to any user without a role
+        cur.execute("SELECT id FROM roles WHERE name = 'Administrator'")
+        res = cur.fetchone()
+        if res:
+            cur.execute("UPDATE users SET role_id = %s WHERE role_id IS NULL", (res[0],))
 
         print("Creating table: local_cameras")
         cur.execute("""

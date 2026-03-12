@@ -1,0 +1,275 @@
+{% extends "base.html" %}
+{% set active_page = 'settings' %}
+
+{% block content %}
+<div id="view-users" style="height: calc(100vh - 53px); overflow-y: auto; background: var(--bg); padding: 28px;">
+    <div style="background: var(--surface); border-radius: 14px; border: 1px solid var(--border); box-shadow: var(--shadow-sm); padding: 32px 40px; min-height: calc(100vh - 53px - 56px);">
+        
+        <!-- Page Header -->
+        <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 24px;">
+            <div>
+                <a href="/settings" style="text-decoration: none; font-size: 13px; color: var(--accent); font-weight: 600;">‹ Back to Settings</a>
+                <h1 style="font-size: 24px; font-weight: 800; color: var(--text); margin: 8px 0 4px;">Users & Teams</h1>
+                <p style="font-size: 14px; color: var(--muted); margin: 0;">Manage users and their access to your organization</p>
+            </div>
+            <button onclick="openCreateUserModal()" style="background: var(--accent); color: white; border: none; padding: 10px 20px; border-radius: 8px; font-weight: 600; cursor: pointer; display: flex; align-items: center; gap: 8px;">
+                <span>+</span> Add User
+            </button>
+        </div>
+
+        <!-- User Table -->
+        <div style="background: var(--bg); border: 1px solid var(--border); border-radius: 12px; overflow: visible;">
+            <table style="width: 100%; border-collapse: collapse; text-align: left;">
+                <thead style="background: var(--surface2); border-bottom: 1px solid var(--border);">
+                    <tr>
+                        <th style="padding: 16px; font-size: 12px; font-weight: 700; color: var(--muted); text-transform: uppercase;">User</th>
+                        <th style="padding: 16px; font-size: 12px; font-weight: 700; color: var(--muted); text-transform: uppercase;">Email</th>
+                        <th style="padding: 16px; font-size: 12px; font-weight: 700; color: var(--muted); text-transform: uppercase;">Role</th>
+                        <th style="padding: 16px; font-size: 12px; font-weight: 700; color: var(--muted); text-transform: uppercase;">Status</th>
+                        <th style="padding: 16px; font-size: 12px; font-weight: 700; color: var(--muted); text-transform: uppercase;">Last Login</th>
+                        <th style="padding: 16px; font-size: 12px; font-weight: 700; color: var(--muted); text-transform: uppercase; text-align: right;">Actions</th>
+                    </tr>
+                </thead>
+                <tbody id="user-table-body">
+                    <!-- Loaded via JS -->
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<!-- Create/Edit User Modal -->
+<div id="user-modal" class="modal-overlay" style="display:none;" onclick="if(event.target==this) closeUserModal()">
+    <div class="modal-content" style="max-width: 480px; max-height: 85vh; overflow-y: auto;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px; position: sticky; top: -30px; background: var(--surface); z-index: 10; padding: 10px 0;">
+            <h2 id="modal-title" style="margin:0; font-size:18px; font-weight:800;">Add New User</h2>
+            <button onclick="closeUserModal()" style="background:none; border:none; font-size:24px; cursor:pointer; color:var(--muted);">&times;</button>
+        </div>
+        <form id="user-form" onsubmit="handleUserSubmit(event)">
+            <input type="hidden" id="edit-email">
+            <div class="s-field">
+                <label>Full Name</label>
+                <input type="text" id="user-name" placeholder="John Doe" required>
+            </div>
+            <div class="s-field">
+                <label>Email Address</label>
+                <input type="email" id="user-email" placeholder="john@example.com" required>
+            </div>
+            <div class="s-field" id="pw-field">
+                <label>Password</label>
+                <input type="password" id="user-password" placeholder="••••••••">
+                <p style="font-size: 11px; color: var(--muted); margin-top: 4px;" id="pw-note">Leave blank to keep current password</p>
+            </div>
+            <div class="s-field">
+                <label>Company</label>
+                <input type="text" id="user-company" placeholder="Acme Corp">
+            </div>
+            <div class="s-field">
+                <label>Phone Number</label>
+                <input type="text" id="user-phone" placeholder="+1 234 567 890">
+            </div>
+            <div class="s-field">
+                <label>Role</label>
+                <select id="user-role" style="width:100%; padding:10px; border-radius:8px; border:1px solid var(--border); background:var(--bg); color:var(--text);" required>
+                </select>
+            </div>
+            <div class="s-field">
+                <label>Status</label>
+                <select id="user-status" style="width:100%; padding:10px; border-radius:8px; border:1px solid var(--border); background:var(--bg); color:var(--text);">
+                    <option value="active">Active</option>
+                    <option value="inactive">Inactive</option>
+                </select>
+            </div>
+            <button type="submit" id="save-user-btn" style="width:100%; padding:14px; background:var(--accent); color:white; border:none; border-radius:8px; font-weight:700; cursor:pointer; margin-top:10px; font-size:14px;">Save User</button>
+        </form>
+    </div>
+</div>
+
+<style>
+.modal-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.6); display: flex; align-items: center; justify-content: center; z-index: 1000; backdrop-filter: blur(2px); }
+.modal-content { background: var(--surface); padding: 30px; border-radius: 16px; width: 90%; box-shadow: var(--shadow-lg); border: 1px solid var(--border); animation: modalIn 0.2s ease-out; }
+@keyframes modalIn { from { transform: scale(0.95); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+
+.s-field { margin-bottom: 18px; }
+.s-field label { display: block; font-size: 13px; font-weight: 700; color: var(--text); margin-bottom: 6px; }
+.s-field input { width: 100%; padding: 10px 14px; border: 1px solid var(--border); border-radius: 8px; background: var(--bg); color: var(--text); outline: none; transition: all 0.2s; font-size: 14px; }
+.s-field input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-bg); }
+
+.badge { padding: 4px 10px; border-radius: 20px; font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.5px; }
+.badge-role { background: var(--accent-bg); color: var(--accent); border: 1px solid var(--accent); }
+.badge-active { background: #dcfce7; color: #166534; }
+.badge-inactive { background: #f3f4f6; color: #6b7280; }
+
+/* Dropdown Menu */
+.actions-cell { position: relative; text-align: right; }
+.actions-btn { background: none; border: none; font-size: 20px; color: var(--muted); cursor: pointer; padding: 4px 8px; border-radius: 4px; line-height: 1; }
+.actions-btn:hover { background: var(--surface2); color: var(--text); }
+
+.actions-dropdown { 
+    position: absolute; right: 0; top: 100%; background: var(--surface); border: 1px solid var(--border); 
+    border-radius: 10px; box-shadow: var(--shadow-md); z-index: 100; min-width: 160px; display: none; 
+    overflow: hidden; margin-top: 4px; text-align: left;
+}
+.actions-dropdown.show { display: block; }
+.dropdown-item { 
+    padding: 10px 14px; font-size: 13px; font-weight: 600; color: var(--text); cursor: pointer; 
+    display: flex; align-items: center; gap: 10px; transition: all 0.2s; 
+}
+.dropdown-item:hover { background: var(--surface2); color: var(--accent); }
+.dropdown-item.danger { color: #ef4444; }
+.dropdown-item.danger:hover { background: #fee2e2; }
+
+tr:hover { background: var(--surface2); }
+</style>
+
+<script>
+let allRoles = [];
+let currentUsers = [];
+
+async function loadUsers() {
+    const res = await fetch('/api/settings/users');
+    currentUsers = await res.json();
+    const body = document.getElementById('user-table-body');
+    body.innerHTML = currentUsers.map(u => `
+        <tr style="border-bottom: 1px solid var(--border);">
+            <td style="padding: 16px;">
+                <div style="display: flex; align-items: center; gap: 12px;">
+                    <div style="width: 36px; height: 36px; background: var(--accent-bg); color: var(--accent); border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 13px;">
+                        ${(u.name || "?").charAt(0).toUpperCase()}
+                    </div>
+                    <div>
+                        <div style="font-weight: 700; color: var(--text); font-size: 14px;">${u.name}</div>
+                        <div style="font-size: 12px; color: var(--muted);">${u.company || ''}</div>
+                    </div>
+                </div>
+            </td>
+            <td style="padding: 16px; font-size: 13px; color: var(--text);">${u.email}</td>
+            <td style="padding: 16px;"><span class="badge badge-role">${u.role_name || 'No Role'}</span></td>
+            <td style="padding: 16px;"><span class="badge badge-${u.status}">${u.status}</span></td>
+            <td style="padding: 16px; font-size: 12px; color: var(--muted);">${u.last_login ? new Date(u.last_login).toLocaleString([], {dateStyle:'short', timeStyle:'short'}) : 'Never'}</td>
+            <td style="padding: 16px;" class="actions-cell">
+                <button class="actions-btn" onclick="toggleActions(event, '${u.email}')">⋮</button>
+                <div id="actions-${u.email.replace(/[@.]/g, '_')}" class="actions-dropdown">
+                    <div class="dropdown-item" onclick="openEditUserModal('${u.email}')"><span>✏️</span> Edit Profile</div>
+                    <div class="dropdown-item" onclick="resetPasswordFromList('${u.email}')"><span>🔑</span> Reset Password</div>
+                    <div class="dropdown-item" onclick="toggleUserStatus('${u.email}', '${u.status}')">
+                        <span>${u.status === 'active' ? '🚫' : '✅'}</span> ${u.status === 'active' ? 'Deactivate' : 'Activate'}
+                    </div>
+                </div>
+            </td>
+        </tr>
+    `).join('');
+}
+
+function toggleActions(e, email) {
+    e.stopPropagation();
+    const id = "actions-" + email.replace(/[@.]/g, '_');
+    const all = document.querySelectorAll('.actions-dropdown');
+    all.forEach(d => { if(d.id !== id) d.classList.remove('show'); });
+    document.getElementById(id).classList.toggle('show');
+}
+
+window.addEventListener('click', () => {
+    document.querySelectorAll('.actions-dropdown').forEach(d => d.classList.remove('show'));
+});
+
+async function loadRoles() {
+    const res = await fetch('/api/settings/roles');
+    allRoles = await res.json();
+    const select = document.getElementById('user-role');
+    select.innerHTML = '<option value="">Select Role</option>' + allRoles.map(r => `<option value="${r.id}">${r.name}</option>`).join('');
+}
+
+function openCreateUserModal() {
+    document.getElementById('modal-title').innerText = "Add New User";
+    document.getElementById('user-form').reset();
+    document.getElementById('edit-email').value = "";
+    document.getElementById('user-email').disabled = false;
+    document.getElementById('pw-note').style.display = 'none';
+    document.getElementById('user-password').required = true;
+    document.getElementById('user-modal').style.display = 'flex';
+}
+
+function openEditUserModal(email) {
+    const u = currentUsers.find(x => x.email === email);
+    if(!u) return;
+
+    document.getElementById('modal-title').innerText = "Edit User";
+    document.getElementById('edit-email').value = email;
+    document.getElementById('user-email').value = email;
+    document.getElementById('user-email').disabled = true;
+    document.getElementById('user-name').value = u.name;
+    document.getElementById('user-company').value = u.company || '';
+    document.getElementById('user-role').value = u.role_id || '';
+    document.getElementById('user-phone').value = u.phone || '';
+    document.getElementById('user-status').value = u.status;
+    document.getElementById('user-password').value = "";
+    document.getElementById('user-password').required = false;
+    document.getElementById('pw-note').style.display = 'block';
+    document.getElementById('user-modal').style.display = 'flex';
+}
+
+function resetPasswordFromList(email) {
+    openEditUserModal(email);
+    document.getElementById('modal-title').innerText = "Reset Password";
+    setTimeout(() => { document.getElementById('user-password').focus(); }, 100);
+}
+
+async function toggleUserStatus(email, currentStatus) {
+    const newStatus = currentStatus === 'active' ? 'inactive' : 'active';
+    const res = await fetch(`/api/settings/users/${email}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: newStatus })
+    });
+    const result = await res.json();
+    if (result.success) loadUsers();
+}
+
+function closeUserModal() {
+    document.getElementById('user-modal').style.display = 'none';
+}
+
+async function handleUserSubmit(e) {
+    e.preventDefault();
+    const email = document.getElementById('user-email').value;
+    const editEmail = document.getElementById('edit-email').value;
+    const isEdit = editEmail !== "";
+
+    const data = {
+        name: document.getElementById('user-name').value,
+        company: document.getElementById('user-company').value,
+        role_id: parseInt(document.getElementById('user-role').value),
+        phone: document.getElementById('user-phone').value,
+        status: document.getElementById('user-status').value,
+        password: document.getElementById('user-password').value
+    };
+
+    let url = '/api/settings/users';
+    let method = 'POST';
+    if (isEdit) { url = `/api/settings/users/${editEmail}`; method = 'PATCH'; }
+    else { data.email = email; }
+
+    const btn = document.getElementById('save-user-btn');
+    btn.disabled = true;
+    btn.innerText = "Saving...";
+
+    try {
+        const res = await fetch(url, {
+            method: method,
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(data)
+        });
+        const result = await res.json();
+        if (result.success) { closeUserModal(); loadUsers(); }
+        else { alert("Error: " + result.error); }
+    } catch (err) { alert("Network error"); }
+    finally { btn.disabled = false; btn.innerText = "Save User"; }
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+    loadUsers();
+    loadRoles();
+});
+</script>
+{% endblock %}

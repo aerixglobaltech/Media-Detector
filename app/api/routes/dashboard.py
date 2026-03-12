@@ -70,3 +70,16 @@ def route_settings_cameras():
 @login_required
 def route_settings_integrations():
     return render_template("settings/integrations.html")
+
+
+@dashboard_bp.route("/settings/users")
+@login_required
+def route_settings_users():
+    return render_template("settings/users.html")
+
+
+@dashboard_bp.route("/settings/roles")
+@login_required
+def route_settings_roles():
+    return render_template("settings/roles.html")
+

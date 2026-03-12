@@ -37,14 +37,27 @@
         </div>
         <div class="s-card-arrow">›</div>
       </a>
-      <a href="/settings/staff" class="s-card" style="text-decoration:none;">
-        <div class="s-card-icon">📸</div>
+      {% if user_permissions.all or user_permissions.users_view or not user_permissions %}
+      <a href="/settings/users" class="s-card" style="text-decoration:none;">
+        <div class="s-card-icon">👥</div>
         <div class="s-card-body">
-          <div class="s-card-title">Staff Photos</div>
-          <div class="s-card-desc">Upload and manage staff recognition profiles</div>
+          <div class="s-card-title">Users & Teams</div>
+          <div class="s-card-desc">Manage users, teams, and departments</div>
         </div>
         <div class="s-card-arrow">›</div>
       </a>
+      {% endif %}
+
+      {% if user_permissions.all or user_permissions.roles_view or not user_permissions %}
+      <a href="/settings/roles" class="s-card" style="text-decoration:none;">
+        <div class="s-card-icon">🛡️</div>
+        <div class="s-card-body">
+          <div class="s-card-title">Roles & Permissions</div>
+          <div class="s-card-desc">Configure access control and permissions (RBAC)</div>
+        </div>
+        <div class="s-card-arrow">›</div>
+      </a>
+      {% endif %}
     </div>
   </div>
 
@@ -55,6 +68,7 @@
       <div class="s-section-sub">Add and manage your surveillance cameras</div>
     </div>
     <div class="s-card-grid">
+      {% if user_permissions.all or user_permissions.cameras_view or not user_permissions %}
       <a href="/settings/cameras" class="s-card" style="text-decoration:none;">
         <div class="s-card-icon">📷</div>
         <div class="s-card-body">
@@ -63,6 +77,18 @@
         </div>
         <div class="s-card-arrow">›</div>
       </a>
+      {% endif %}
+
+      {% if user_permissions.all or user_permissions.staff_view or not user_permissions %}
+      <a href="/settings/staff" class="s-card" style="text-decoration:none;">
+        <div class="s-card-icon">📸</div>
+        <div class="s-card-body">
+          <div class="s-card-title">Staff Profiles</div>
+          <div class="s-card-desc">Upload and manage staff recognition profiles</div>
+        </div>
+        <div class="s-card-arrow">›</div>
+      </a>
+      {% endif %}
     </div>
   </div>
 
@@ -73,6 +99,7 @@
       <div class="s-section-sub">Connect external services and APIs</div>
     </div>
     <div class="s-card-grid">
+      {% if user_permissions.all or user_permissions.settings_view or not user_permissions %}
       <a href="/settings/integrations" class="s-card" style="text-decoration:none;">
         <div class="s-card-icon">🔔</div>
         <div class="s-card-body">
@@ -81,6 +108,7 @@
         </div>
         <div class="s-card-arrow">›</div>
       </a>
+      {% endif %}
     </div>
   </div>
 

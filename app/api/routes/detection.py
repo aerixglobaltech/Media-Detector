@@ -129,13 +129,23 @@ def api_user_profile():
 
     conn = get_db_connection()
     cur  = conn.cursor()
-    cur.execute("SELECT email, name, company FROM users WHERE email = %s", (email,))
+    cur.execute("""
+        SELECT u.email, u.name, u.company, r.name as role_name 
+        FROM users u
+        LEFT JOIN roles r ON u.role_id = r.id
+        WHERE u.email = %s
+    """, (email,))
     user = cur.fetchone()
     cur.close()
     conn.close()
 
     if user:
-        return jsonify({"email": user["email"], "name": user["name"], "company": user["company"]})
+        return jsonify({
+            "email": user["email"], 
+            "name": user["name"], 
+            "company": user["company"],
+            "role": user["role_name"]
+        })
     return jsonify({"error": "User not found"}), 404
 
 

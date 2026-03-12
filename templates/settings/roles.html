@@ -1,0 +1,418 @@
+{% extends "base.html" %}
+{% set active_page = 'settings' %}
+
+{% block content %}
+<div id="view-roles" style="height: calc(100vh - 53px); overflow-y: auto; background: var(--bg); padding: 28px;">
+    <div style="background: var(--surface); border-radius: 14px; border: 1px solid var(--border); box-shadow: var(--shadow-sm); padding: 32px 40px; min-height: calc(100vh - 53px - 56px);">
+        
+        <!-- Page Header -->
+        <div style="display: flex; justify-content: space-between; align-items: flex-end; margin-bottom: 24px;">
+            <div>
+                <a href="/settings" style="text-decoration: none; font-size: 13px; color: var(--accent); font-weight: 600;">‹ Back to Settings</a>
+                <h1 style="font-size: 24px; font-weight: 800; color: var(--text); margin: 8px 0 4px;">Roles & Permissions</h1>
+                <p style="font-size: 14px; color: var(--muted); margin: 0;">Configure access control and permissions for different user levels</p>
+            </div>
+            <div style="display: flex; gap: 12px;">
+                <button onclick="openCreateRoleModal()" style="background: var(--accent); color: white; border: none; padding: 10px 20px; border-radius: 8px; font-weight: 600; cursor: pointer; display: flex; align-items: center; gap: 8px; font-size: 13px; box-shadow: var(--shadow-sm);">
+                    <span>+</span> Create Role
+                </button>
+            </div>
+        </div>
+
+        <!-- Roles List -->
+        <div style="background: var(--bg); border: 1px solid var(--border); border-radius: 12px; overflow: visible;">
+            <table style="width: 100%; border-collapse: collapse; text-align: left;">
+                <thead style="background: var(--surface2); border-bottom: 1px solid var(--border);">
+                    <tr>
+                        <th style="padding: 16px; font-size: 12px; font-weight: 700; color: var(--muted); text-transform: uppercase;">Role Name</th>
+                        <th style="padding: 16px; font-size: 12px; font-weight: 700; color: var(--muted); text-transform: uppercase;">Description</th>
+                        <th style="padding: 16px; font-size: 12px; font-weight: 700; color: var(--muted); text-transform: uppercase;">Permissions</th>
+                        <th style="padding: 16px; font-size: 12px; font-weight: 700; color: var(--muted); text-transform: uppercase;">Users</th>
+                        <th style="padding: 16px; font-size: 12px; font-weight: 700; color: var(--muted); text-transform: uppercase;">Type</th>
+                        <th style="padding: 16px; font-size: 12px; font-weight: 700; color: var(--muted); text-transform: uppercase;">Status</th>
+                        <th style="padding: 16px; font-size: 12px; font-weight: 700; color: var(--muted); text-transform: uppercase; text-align: right;">Actions</th>
+                    </tr>
+                </thead>
+                <tbody id="role-table-body">
+                    <!-- Loaded via JS -->
+                </tbody>
+            </table>
+        </div>
+
+        <!-- Permission Matrix Section -->
+        <div style="margin-top: 48px; padding-top: 32px; border-top: 2px dashed var(--border);">
+            <div style="margin-bottom: 24px;">
+                <h2 style="font-size: 20px; font-weight: 800; color: var(--text); margin: 0 0 4px;">Permission Matrix</h2>
+                <p style="font-size: 13px; color: var(--muted); margin: 0;">Overview of permissions across all roles</p>
+            </div>
+
+            <div style="background: var(--bg); border: 1px solid var(--border); border-radius: 12px; overflow-x: auto;">
+                <table style="width: 100%; border-collapse: collapse; text-align: left; min-width: 800px;">
+                    <thead id="matrix-header" style="background: var(--surface2); border-bottom: 1px solid var(--border);">
+                        <!-- Loaded via JS -->
+                    </thead>
+                    <tbody id="matrix-body">
+                        <!-- Loaded via JS -->
+                    </tbody>
+                </table>
+            </div>
+            
+            <div style="margin-top: 24px; padding: 16px; background: #eff6ff; border: 1px solid #dbeafe; border-radius: 12px; display: flex; gap: 12px; align-items: flex-start;">
+                <span style="font-size: 18px;">ℹ️</span>
+                <p style="font-size: 13px; color: #1e40af; margin: 0; line-height: 1.5;">
+                    This matrix provides a side-by-side comparison of access levels for each defined role. A green checkmark indicates that the role has at least 'View' access to that resource.
+                </p>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Create/Edit Role Modal -->
+<div id="role-modal" class="modal-overlay" style="display:none;" onclick="if(event.target==this) closeRoleModal()">
+    <div class="modal-content" style="max-width: 500px; max-height: 85vh; overflow-y: auto;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px; position: sticky; top: -30px; background: var(--surface); z-index: 10; padding: 10px 0;">
+            <h2 id="role-modal-title" style="margin:0; font-size:18px; font-weight:800;">Create New Role</h2>
+            <button onclick="closeRoleModal()" style="background:none; border:none; font-size:24px; cursor:pointer; color:var(--muted);">&times;</button>
+        </div>
+        <form id="role-form" onsubmit="handleRoleSubmit(event)">
+            <input type="hidden" id="edit-role-id">
+            <div class="s-field">
+                <label>Role Name</label>
+                <input type="text" id="role-name" placeholder="e.g. Supervisor" required>
+            </div>
+            <div class="s-field">
+                <label>Description</label>
+                <input type="text" id="role-desc" placeholder="Brief explanation of this role's purpose">
+            </div>
+            
+            <div style="margin-top: 20px;">
+                <label style="display: block; font-size: 13px; font-weight: 700; color: var(--text); margin-bottom: 12px;">Modular Permissions</label>
+                <div style="background: var(--bg); padding: 5px; border-radius: 12px; border: 1px solid var(--border);">
+                    <div style="display:flex; align-items:center; gap:10px; padding: 12px 16px; background: var(--surface2); border-radius: 8px 8px 0 0; border-bottom: 1px solid var(--border);">
+                        <input type="checkbox" id="perm-all" class="perm-check"> 
+                        <label for="perm-all" style="font-size:14px; font-weight:800; margin:0; color:var(--accent);">Full Administrator Access</label>
+                    </div>
+                    
+                    <div id="module-perms-container">
+                        <!-- Dynamic Module Rows -->
+                    </div>
+                </div>
+            </div>
+
+            <button type="submit" id="save-role-btn" style="width:100%; padding:14px; background:var(--accent); color:white; border:none; border-radius:8px; font-weight:700; cursor:pointer; margin-top:28px; font-size:14px; box-shadow: var(--shadow-sm);">Save Role Configuration</button>
+        </form>
+    </div>
+</div>
+
+<style>
+.modal-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.6); display: flex; align-items: center; justify-content: center; z-index: 1000; backdrop-filter: blur(2px); }
+.modal-content { background: var(--surface); padding: 30px; border-radius: 16px; width: 95%; max-width: 650px; box-shadow: var(--shadow-lg); border: 1px solid var(--border); animation: modalIn 0.2s ease-out; }
+@keyframes modalIn { from { transform: scale(0.95); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+
+.s-field { margin-bottom: 20px; }
+.s-field label { display: block; font-size: 13px; font-weight: 700; color: var(--text); margin-bottom: 8px; }
+.s-field input { width: 100%; padding: 10px 14px; border: 1px solid var(--border); border-radius: 8px; background: var(--bg); color: var(--text); outline: none; transition: all 0.2s; font-size: 14px; }
+.s-field input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-bg); }
+
+.badge { padding: 4px 10px; border-radius: 20px; font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.5px; }
+.badge-fixed { background: #f3f4f6; color: #6b7280; }
+.badge-custom { background: #eff6ff; color: #2563eb; border: 1px solid #dbeafe; }
+
+/* Dropdown Menu */
+.actions-cell { position: relative; text-align: right; }
+.actions-btn { background: none; border: none; font-size: 20px; color: var(--muted); cursor: pointer; padding: 4px 8px; border-radius: 4px; line-height: 1; }
+.actions-btn:hover { background: var(--surface2); color: var(--text); }
+
+.actions-dropdown { 
+    position: absolute; right: 0; top: 100%; background: var(--surface); border: 1px solid var(--border); 
+    border-radius: 10px; box-shadow: var(--shadow-md); z-index: 100; min-width: 150px; display: none; 
+    overflow: hidden; margin-top: 4px; text-align: left;
+}
+.actions-dropdown.show { display: block; }
+.dropdown-item { 
+    padding: 10px 14px; font-size: 13px; font-weight: 600; color: var(--text); cursor: pointer; 
+    display: flex; align-items: center; gap: 10px; transition: all 0.2s; 
+}
+.dropdown-item:hover { background: var(--surface2); color: var(--accent); }
+.dropdown-item.danger { color: #ef4444; }
+.dropdown-item.danger:hover { background: #fee2e2; }
+
+.module-perm-row { display: grid; grid-template-columns: 140px 1fr; align-items: center; padding: 10px 16px; border-bottom: 1px solid var(--border); }
+.module-perm-row:last-child { border-bottom: none; }
+.perm-grid { display: flex; gap: 15px; }
+.perm-opt { display: flex; align-items: center; gap: 4px; font-size: 12px; color: var(--muted); }
+.perm-opt input { width: 15px; height: 15px; cursor: pointer; }
+
+tr:hover { background: var(--surface2); }
+</style>
+
+<script>
+let allRoles = [];
+const appModules = [
+    { id: 'users', name: 'Users' },
+    { id: 'roles', name: 'Roles' },
+    { id: 'cameras', name: 'Cameras' },
+    { id: 'staff', name: 'Staff' },
+    { id: 'reports', name: 'Reports' },
+    { id: 'attendance', name: 'Attendance' },
+    { id: 'settings', name: 'Settings' }
+];
+
+async function loadRoles() {
+    const res = await fetch('/api/settings/roles');
+    allRoles = await res.json();
+    const body = document.getElementById('role-table-body');
+    body.innerHTML = allRoles.map(r => {
+        let permCount = 0;
+        if (r.permissions) {
+            if (r.permissions.all) {
+                permCount = appModules.length * 4; // Total possible perms
+            } else {
+                permCount = Object.keys(r.permissions).length;
+            }
+        }
+        const isActive = (r.status === 'active');
+        return `
+        <tr style="border-bottom: 1px solid var(--border);">
+            <td style="padding: 16px; font-weight: 700; color: var(--text); font-size: 14px;">${r.name}</td>
+            <td style="padding: 16px; font-size: 13px; color: var(--muted);">${r.description || ''}</td>
+            <td style="padding: 16px;">
+                <span style="font-size: 11px; font-weight: 700; color: var(--accent); background: var(--accent-bg); padding: 4px 10px; border-radius: 20px; border: 1px solid var(--accent);">
+                    ${permCount} permissions
+                </span>
+            </td>
+            <td style="padding: 16px; font-size: 13px; color: var(--text); font-weight: 600;">${r.user_count} users</td>
+            <td style="padding: 16px;"><span class="badge ${r.is_system ? 'badge-fixed' : 'badge-custom'}">${r.is_system ? 'System' : 'Custom'}</span></td>
+            <td style="padding: 16px;">
+                <span style="font-size: 10px; font-weight: 800; padding: 4px 10px; border-radius: 20px; background: ${isActive ? '#ecfdf5' : '#fef2f2'}; color: ${isActive ? '#059669' : '#dc2626'};">
+                    ${r.status ? r.status.toUpperCase() : 'ACTIVE'}
+                </span>
+            </td>
+            <td style="padding: 16px;" class="actions-cell">
+                <button class="actions-btn" onclick="toggleActions(event, ${r.id})">⋮</button>
+                <div id="role-actions-${r.id}" class="actions-dropdown">
+                    <div class="dropdown-item" onclick='openEditRoleById(${r.id})'><span>✏️</span> Edit Role</div>
+                    ${!r.is_system ? `<div class="dropdown-item ${isActive ? 'danger' : ''}" onclick="toggleRoleStatus(${r.id}, '${isActive ? 'inactive' : 'active'}')">
+                        <span>${isActive ? '🔴' : '🟢'}</span> ${isActive ? 'Deactivate' : 'Activate'}
+                    </div>` : ''}
+                </div>
+            </td>
+        </tr>
+    `}).join('');
+    
+    renderPermissionMatrix(allRoles);
+}
+
+function initModuleUI() {
+    const container = document.getElementById('module-perms-container');
+    container.innerHTML = appModules.map(m => `
+        <div class="module-perm-row">
+            <div style="font-size:13px; font-weight:700; color:var(--text); cursor:pointer;" onclick="toggleModuleAll('${m.id}')">
+                <input type="checkbox" id="select-all-${m.id}" class="module-all-check" style="margin-right: 8px; cursor:pointer;" onclick="event.stopPropagation(); toggleModuleAll('${m.id}')">
+                ${m.name}
+            </div>
+            <div class="perm-grid">
+                <label class="perm-opt"><input type="checkbox" class="perm-check perm-${m.id}" id="perm-${m.id}-v"> View</label>
+                <label class="perm-opt"><input type="checkbox" class="perm-check perm-${m.id}" id="perm-${m.id}-c"> Create</label>
+                <label class="perm-opt"><input type="checkbox" class="perm-check perm-${m.id}" id="perm-${m.id}-u"> Edit</label>
+                <label class="perm-opt"><input type="checkbox" class="perm-check perm-${m.id}" id="perm-${m.id}-d"> Delete</label>
+            </div>
+        </div>
+    `).join('');
+
+    // Full Administrator selection logic
+    document.getElementById('perm-all').addEventListener('change', function() {
+        const isChecked = this.checked;
+        document.querySelectorAll('.perm-check').forEach(c => c.checked = isChecked);
+        document.querySelectorAll('.module-all-check').forEach(c => c.checked = isChecked);
+    });
+
+    // Individual checkbox logic to uncheck "Select All" if any checkbox is unchecked
+    document.addEventListener('change', function(e) {
+        if (e.target.classList.contains('perm-check')) {
+            const moduleId = e.target.id.split('-')[1];
+            updateModuleAllState(moduleId);
+            updateAdminAllState();
+        }
+    });
+}
+
+function toggleModuleAll(moduleId) {
+    const checkAll = document.getElementById(`select-all-${moduleId}`);
+    if (event.target.tagName !== 'INPUT') {
+        checkAll.checked = !checkAll.checked;
+    }
+    const isChecked = checkAll.checked;
+    document.querySelectorAll(`.perm-${moduleId}`).forEach(c => c.checked = isChecked);
+    updateAdminAllState();
+}
+
+function updateModuleAllState(moduleId) {
+    const all = document.querySelectorAll(`.perm-${moduleId}`);
+    const checked = document.querySelectorAll(`.perm-${moduleId}:checked`);
+    const checkAll = document.getElementById(`select-all-${moduleId}`);
+    if(checkAll) checkAll.checked = (all.length === checked.length);
+}
+
+function updateAdminAllState() {
+    const all = document.querySelectorAll('.perm-check');
+    const checked = document.querySelectorAll('.perm-check:checked');
+    document.getElementById('perm-all').checked = (all.length === checked.length);
+}
+
+function renderPermissionMatrix(roles) {
+    const header = document.getElementById('matrix-header');
+    const body = document.getElementById('matrix-body');
+    const moduleIcons = {
+        'users': '👥', 'roles': '🛡️', 'cameras': '📷', 'staff': '📸', 
+        'reports': '📊', 'attendance': '🗓️', 'settings': '⚙️'
+    };
+
+    // Render Header
+    header.innerHTML = `
+        <tr>
+            <th style="padding: 16px; font-size: 12px; font-weight: 700; color: var(--muted); text-transform: uppercase; width: 220px;">Resource</th>
+            ${roles.map(r => `
+                <th style="padding: 16px; font-size: 12px; font-weight: 700; color: var(--muted); text-transform: uppercase; text-align: center;">
+                    <div style="display: flex; flex-direction: column; align-items: center; gap: 4px;">
+                        <span style="font-size: 14px; opacity: 0.7;">🛡️</span>
+                        ${r.name}
+                    </div>
+                </th>
+            `).join('')}
+        </tr>
+    `;
+
+    // Render Body
+    body.innerHTML = appModules.map(m => `
+        <tr style="border-bottom: 1px solid var(--border);">
+            <td style="padding: 16px; font-weight: 700; color: var(--text); font-size: 14px; display: flex; align-items: center; gap: 10px;">
+                <span style="font-size: 16px; opacity: 0.7;">${moduleIcons[m.id] || '📦'}</span>
+                ${m.name}
+            </td>
+            ${roles.map(r => {
+                const hasPerm = r.permissions && (r.permissions.all || r.permissions[`${m.id}_view`]);
+                return `<td style="padding: 16px; text-align: center;">
+                    ${hasPerm ? '<span style="color: #10b981; font-weight: bold; font-size: 18px;">✓</span>' : '<span style="color: #ef4444; opacity: 0.3;">-</span>'}
+                </td>`;
+            }).join('')}
+        </tr>
+    `).join('');
+}
+
+function toggleActions(e, id) {
+    e.stopPropagation();
+    const dropdownId = "role-actions-" + id;
+    const all = document.querySelectorAll('.actions-dropdown');
+    all.forEach(d => { if(d.id !== dropdownId) d.classList.remove('show'); });
+    document.getElementById(dropdownId).classList.toggle('show');
+}
+
+window.addEventListener('click', () => {
+    document.querySelectorAll('.actions-dropdown').forEach(d => d.classList.remove('show'));
+});
+
+function openCreateRoleModal() {
+    document.getElementById('role-modal-title').innerText = "Create New Role";
+    document.getElementById('role-form').reset();
+    document.getElementById('edit-role-id').value = "";
+    document.querySelectorAll('.perm-check').forEach(c => c.checked = false);
+    document.querySelectorAll('.module-all-check').forEach(c => c.checked = false);
+    document.getElementById('perm-all').checked = false;
+    document.getElementById('role-modal').style.display = 'flex';
+}
+
+function openEditRoleById(id) {
+    const role = allRoles.find(r => r.id === id);
+    if(role) openEditRoleModal(role);
+}
+
+function openEditRoleModal(role) {
+    document.getElementById('role-modal-title').innerText = "Edit Role";
+    document.getElementById('edit-role-id').value = role.id;
+    document.getElementById('role-name').value = role.name;
+    document.getElementById('role-desc').value = role.description || '';
+    
+    document.querySelectorAll('.perm-check').forEach(c => c.checked = false);
+    document.querySelectorAll('.module-all-check').forEach(c => c.checked = false);
+    document.getElementById('perm-all').checked = false;
+    const perms = role.permissions || {};
+    if (perms.all) document.getElementById('perm-all').checked = true;
+    
+    appModules.forEach(m => {
+        if(perms[`${m.id}_view`])   document.getElementById(`perm-${m.id}-v`).checked = true;
+        if(perms[`${m.id}_create`]) document.getElementById(`perm-${m.id}-c`).checked = true;
+        if(perms[`${m.id}_update`]) document.getElementById(`perm-${m.id}-u`).checked = true;
+        if(perms[`${m.id}_delete`]) document.getElementById(`perm-${m.id}-d`).checked = true;
+        updateModuleAllState(m.id);
+    });
+    updateAdminAllState();
+    
+    document.getElementById('role-modal').style.display = 'flex';
+}
+
+function closeRoleModal() {
+    document.getElementById('role-modal').style.display = 'none';
+}
+
+async function handleRoleSubmit(e) {
+    e.preventDefault();
+    const id = document.getElementById('edit-role-id').value;
+    const isEdit = id !== "";
+
+    const perms = {};
+    if (document.getElementById('perm-all').checked) perms.all = true;
+    
+    appModules.forEach(m => {
+        if(document.getElementById(`perm-${m.id}-v`).checked) perms[`${m.id}_view`] = true;
+        if(document.getElementById(`perm-${m.id}-c`).checked) perms[`${m.id}_create`] = true;
+        if(document.getElementById(`perm-${m.id}-u`).checked) perms[`${m.id}_update`] = true;
+        if(document.getElementById(`perm-${m.id}-d`).checked) perms[`${m.id}_delete`] = true;
+    });
+
+    const data = {
+        name: document.getElementById('role-name').value,
+        description: document.getElementById('role-desc').value,
+        permissions: perms
+    };
+
+    let url = '/api/settings/roles';
+    let method = 'POST';
+    if (isEdit) { url = `/api/settings/roles/${id}`; method = 'PATCH'; }
+
+    const btn = document.getElementById('save-role-btn');
+    btn.disabled = true;
+    btn.innerText = "Saving Configuration...";
+
+    try {
+        const res = await fetch(url, {
+            method: method,
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(data)
+        });
+        const result = await res.json();
+        if (result.success) { closeRoleModal(); loadRoles(); }
+        else { alert("Error: " + result.error); }
+    } catch (err) { alert("Network error"); }
+    finally { btn.disabled = false; btn.innerText = "Save Role Configuration"; }
+}
+
+async function toggleRoleStatus(id, newStatus) {
+    if (!confirm(`Are you sure you want to ${newStatus === 'active' ? 'activate' : 'deactivate'} this role?`)) return;
+    console.log(`Toggling Role ${id} to ${newStatus}`);
+    const res = await fetch(`/api/settings/roles/${id}`, { 
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: newStatus })
+    });
+    const result = await res.json();
+    if (result.success) loadRoles();
+    else alert("Error: " + result.error);
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+    initModuleUI();
+    loadRoles();
+});
+</script>
+{% endblock %}

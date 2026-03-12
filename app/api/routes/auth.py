@@ -31,15 +31,22 @@ def route_login():
         cur  = conn.cursor()
         cur.execute("SELECT password_hash FROM users WHERE email = %s", (email,))
         user_record = cur.fetchone()
-        cur.close()
-        conn.close()
 
         if user_record and werkzeug.security.check_password_hash(
             user_record["password_hash"], password
         ):
-            session["user"] = email
-            return redirect(url_for("views.index"))
+            # Update last login
+            from datetime import datetime
+            cur.execute("UPDATE users SET last_login = %s WHERE email = %s", (datetime.now(), email))
+            conn.commit()
+            cur.close()
+            conn.close()
 
+            session["user"] = email
+            return redirect(url_for("dashboard.index"))
+
+        cur.close()
+        conn.close()
         return render_template("login.html", error="Invalid credentials")
 
     return render_template("login.html")
@@ -63,18 +70,23 @@ def route_signup():
             conn.close()
             return render_template("signup.html", error="Email already registered")
 
+        # Get default user role
+        cur.execute("SELECT id FROM roles WHERE name = 'User'")
+        role_res = cur.fetchone()
+        role_id = role_res['id'] if role_res else None
+
         # Insert new user
         pw_hash = werkzeug.security.generate_password_hash(password)
         cur.execute(
-            "INSERT INTO users (email, name, company, password_hash) VALUES (%s, %s, %s, %s)",
-            (email, name, company, pw_hash),
+            "INSERT INTO users (email, name, company, password_hash, role_id) VALUES (%s, %s, %s, %s, %s)",
+            (email, name, company, pw_hash, role_id),
         )
         conn.commit()
         cur.close()
         conn.close()
 
         session["user"] = email
-        return redirect(url_for("views.index"))
+        return redirect(url_for("dashboard.index"))
 
     return render_template("signup.html")
 
