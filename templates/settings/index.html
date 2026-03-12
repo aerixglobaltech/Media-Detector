@@ -1,0 +1,136 @@
+{% extends "base.html" %}
+{% set active_page = 'settings' %}
+
+{% block content %}
+<div id="view-settings" style="height: calc(100vh - 53px); overflow-y: auto; background: var(--bg); padding: 28px;">
+<div style="background: var(--surface); border-radius: 14px; border: 1px solid var(--border); box-shadow: var(--shadow-sm); padding: 32px 40px; min-height: calc(100vh - 53px - 56px);">
+
+  <!-- ── Page Header ── -->
+  <div style="margin-bottom: 24px;">
+    <div style="display:flex; align-items:center; gap:12px; margin-bottom:6px;">
+      <span style="font-size:24px;">⚙</span>
+      <h1 style="font-size:22px; font-weight:800; color: var(--text); margin:0;">Settings</h1>
+    </div>
+    <p style="font-size:13px; color: var(--muted); margin:0;">Manage all system configurations and preferences in one place</p>
+  </div>
+
+  <!-- ── Pill Tab Bar ── -->
+  <div class="s-pill-tabs">
+    <button class="s-pill active" onclick="showCat(event,'cat-general')">General</button>
+    <button class="s-pill" onclick="showCat(event,'cat-cameras')">Cameras</button>
+    <button class="s-pill" onclick="showCat(event,'cat-integrations')">Integrations</button>
+    <button class="s-pill" onclick="showCat(event,'cat-system')">System</button>
+  </div>
+
+  <!-- ══ GENERAL ══ -->
+  <div id="cat-general" class="s-cat active">
+    <div class="s-section-header">
+      <div class="s-section-title">Account Settings</div>
+      <div class="s-section-sub">Configure your profile and access preferences</div>
+    </div>
+    <div class="s-card-grid">
+      <a href="/settings/profile" class="s-card" style="text-decoration:none;">
+        <div class="s-card-icon">👤</div>
+        <div class="s-card-body">
+          <div class="s-card-title">My Profile</div>
+          <div class="s-card-desc">View your name, email, and organization details</div>
+        </div>
+        <div class="s-card-arrow">›</div>
+      </a>
+      <a href="/settings/staff" class="s-card" style="text-decoration:none;">
+        <div class="s-card-icon">📸</div>
+        <div class="s-card-body">
+          <div class="s-card-title">Staff Photos</div>
+          <div class="s-card-desc">Upload and manage staff recognition profiles</div>
+        </div>
+        <div class="s-card-arrow">›</div>
+      </a>
+    </div>
+  </div>
+
+  <!-- ══ CAMERAS ══ -->
+  <div id="cat-cameras" class="s-cat">
+    <div class="s-section-header">
+      <div class="s-section-title">Camera Management</div>
+      <div class="s-section-sub">Add and manage your surveillance cameras</div>
+    </div>
+    <div class="s-card-grid">
+      <a href="/settings/cameras" class="s-card" style="text-decoration:none;">
+        <div class="s-card-icon">📷</div>
+        <div class="s-card-body">
+          <div class="s-card-title">Local IP Cameras</div>
+          <div class="s-card-desc">Add RTSP cameras from your local network</div>
+        </div>
+        <div class="s-card-arrow">›</div>
+      </a>
+    </div>
+  </div>
+
+  <!-- ══ INTEGRATIONS ══ -->
+  <div id="cat-integrations" class="s-cat">
+    <div class="s-section-header">
+      <div class="s-section-title">Third-Party Integrations</div>
+      <div class="s-section-sub">Connect external services and APIs</div>
+    </div>
+    <div class="s-card-grid">
+      <a href="/settings/integrations" class="s-card" style="text-decoration:none;">
+        <div class="s-card-icon">🔔</div>
+        <div class="s-card-body">
+          <div class="s-card-title">Integrations Hub</div>
+          <div class="s-card-desc">Telegram bot and Cloud connection settings</div>
+        </div>
+        <div class="s-card-arrow">›</div>
+      </a>
+    </div>
+  </div>
+
+  <!-- ══ SYSTEM ══ -->
+  <div id="cat-system" class="s-cat">
+    <div class="s-section-header">
+      <div class="s-section-title">System Configuration</div>
+      <div class="s-section-sub">Application diagnostics and advanced settings</div>
+    </div>
+    <div class="s-card-grid">
+      <div class="s-card" style="opacity:0.5; cursor:default;">
+        <div class="s-card-icon">🛡️</div>
+        <div class="s-card-body">
+          <div class="s-card-title">Security</div>
+          <div class="s-card-desc">Session and access control</div>
+        </div>
+        <span style="font-size:10px; background: var(--surface2); color: var(--muted); padding:3px 8px; border-radius:20px; font-weight:700;">Soon</span>
+      </div>
+    </div>
+  </div>
+
+</div>
+</div>
+
+<style>
+.s-pill-tabs { display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px; background: var(--surface2); padding: 5px; border-radius: 10px; width: 100%; margin-bottom: 36px; border: 1px solid var(--border); }
+.s-pill { background: none; border: none; padding: 10px 20px; border-radius: 7px; font-size: 13px; font-weight: 600; color: var(--muted); cursor: pointer; transition: all 0.2s; text-align: center; }
+.s-pill:hover { color: var(--text); }
+.s-pill.active { background: var(--surface); color: var(--accent); box-shadow: var(--shadow-sm); border: 1px solid var(--border); }
+.s-cat { display: none; }
+.s-cat.active { display: block; }
+.s-section-header { margin-bottom: 16px; }
+.s-section-title { font-size: 16px; font-weight: 700; color: var(--text); }
+.s-section-sub { font-size: 13px; color: var(--muted); margin-top: 3px; }
+.s-card-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; }
+.s-card { display: flex; align-items: flex-start; gap: 14px; padding: 18px 20px; background: var(--bg); border: 1px solid var(--border); border-radius: 12px; cursor: pointer; transition: all 0.2s; box-shadow: var(--shadow-sm); }
+.s-card:hover { border-color: var(--accent); box-shadow: var(--shadow-md); transform: translateY(-1px); }
+.s-card-icon { width: 40px; height: 40px; background: var(--accent-bg); border-radius: 8px; display: flex; align-items: center; justify-content: center; font-size: 18px; flex-shrink: 0; }
+.s-card-body { flex: 1; }
+.s-card-title { font-size: 14px; font-weight: 700; color: var(--text); }
+.s-card-desc { font-size: 12px; color: var(--muted); margin-top: 4px; line-height: 1.5; }
+.s-card-arrow { font-size: 20px; color: var(--muted); margin-left: 4px; }
+</style>
+
+<script>
+function showCat(e, catId) {
+  document.querySelectorAll('.s-pill').forEach(el => el.classList.remove('active'));
+  document.querySelectorAll('.s-cat').forEach(el => el.classList.remove('active'));
+  e.currentTarget.classList.add('active');
+  document.getElementById(catId).classList.add('active');
+}
+</script>
+{% endblock %}

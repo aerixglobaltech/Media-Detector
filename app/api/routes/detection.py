@@ -69,7 +69,7 @@ def api_toggles():
 @api_bp.route("/api/dashboard_info")
 def api_dashboard_info():
     """Stats card data: motion events, unique people, camera online/offline counts."""
-    from app.services.camera_manager import _total_motion_events
+    from app.services.camera_service import _total_motion_events
 
     unique_people = 0
     try:
@@ -158,15 +158,36 @@ def api_upload_staff():
     if not staff_name:
         return jsonify({"success": False, "error": "Invalid staff name"})
 
-    if "photos" not in request.files:
-        return jsonify({"success": False, "error": "No files attached"})
+    is_update = request.form.get("is_update") == "true"
+    files = request.files.getlist("photos") if "photos" in request.files else []
+    
+    if not is_update:
+        if not files or (len(files) == 1 and files[0].filename == ""):
+            return jsonify({"success": False, "error": "No valid files selected"})
 
-    files = request.files.getlist("photos")
-    if not files or (len(files) == 1 and files[0].filename == ""):
-        return jsonify({"success": False, "error": "No valid files selected"})
-
-    staff_dir = os.path.join(_upload_folder(), staff_name)
+    original_name = request.form.get("original_name", "")
+    sanitized_original = secure_filename(original_name) if original_name else ""
+    
+    if is_update and sanitized_original:
+        # We are updating. Use the original folder.
+        staff_dir = os.path.join(_upload_folder(), sanitized_original)
+        
+        # If the name has changed, rename the folder first
+        if sanitized_original != staff_name:
+            new_dir = os.path.join(_upload_folder(), staff_name)
+            if os.path.exists(staff_dir):
+                os.rename(staff_dir, new_dir)
+            staff_dir = new_dir
+    else:
+        # We are creating new
+        staff_dir = os.path.join(_upload_folder(), staff_name)
+        
     os.makedirs(staff_dir, exist_ok=True)
+
+    email = request.form.get("email", "")
+    phone = request.form.get("phone", "")
+    address = request.form.get("address", "")
+    communication = request.form.get("communication", "") # JSON string from frontend
 
     saved_count = 0
     for file in files:
@@ -174,6 +195,49 @@ def api_upload_staff():
             filename = secure_filename(file.filename)
             file.save(os.path.join(staff_dir, filename))
             saved_count += 1
+
+    conn = None
+    cur = None
+    try:
+        conn = get_db_connection()
+        cur = conn.cursor()
+        if is_update and original_name:
+            # FORCE update based on the EXACT original name stored in DB
+            cur.execute("""
+                UPDATE staff_profiles 
+                SET name = %s, email = %s, phone = %s, address = %s, communication = %s, folder_path = %s 
+                WHERE name = %s
+            """, (staff_name, email, phone, address, communication, staff_dir, original_name))
+            
+            # If no rows were updated (maybe name was already changed/sanitized), 
+            # try finding by sanitized original name
+            if cur.rowcount == 0 and sanitized_original:
+                cur.execute("""
+                    UPDATE staff_profiles 
+                    SET name = %s, email = %s, phone = %s, address = %s, communication = %s, folder_path = %s 
+                    WHERE name = %s
+                """, (staff_name, email, phone, address, communication, staff_dir, sanitized_original))
+        else:
+            # Pure CREATE or UPSERT by new name
+            cur.execute("SELECT id FROM staff_profiles WHERE name = %s", (staff_name,))
+            row = cur.fetchone()
+            if row:
+                cur.execute("""
+                    UPDATE staff_profiles 
+                    SET email = %s, phone = %s, address = %s, communication = %s, folder_path = %s 
+                    WHERE id = %s
+                """, (email, phone, address, communication, staff_dir, row["id"]))
+            else:
+                cur.execute("""
+                    INSERT INTO staff_profiles (name, email, phone, address, communication, folder_path)
+                    VALUES (%s, %s, %s, %s, %s, %s)
+                """, (staff_name, email, phone, address, communication, staff_dir))
+        conn.commit()
+    except Exception as e:
+        log.error("DB error saving staff profile: %s", e)
+    finally:
+        if conn:
+            conn.close()
 
     return jsonify({"success": True, "saved_count": saved_count})
 
@@ -184,23 +248,39 @@ def api_staff_profiles():
     """List all staff profiles with a thumbnail URL and photo count."""
     profiles     = []
     upload_folder = _upload_folder()
-    if os.path.exists(upload_folder):
-        for staff_name in os.listdir(upload_folder):
+    
+    try:
+        conn = get_db_connection()
+        cur = conn.cursor()
+        cur.execute("SELECT * FROM staff_profiles ORDER BY created_at DESC")
+        rows = cur.fetchall()
+        for row in rows:
+            staff_name = row["name"]
             staff_dir = os.path.join(upload_folder, staff_name)
-            if os.path.isdir(staff_dir):
-                photos = [
-                    f for f in os.listdir(staff_dir)
-                    if f.lower().endswith((".png", ".jpg", ".jpeg"))
-                ]
+            photo_count = 0
+            thumbnail_url = ""
+            if os.path.exists(staff_dir) and os.path.isdir(staff_dir):
+                photos = [f for f in os.listdir(staff_dir) if f.lower().endswith((".png", ".jpg", ".jpeg"))]
+                photo_count = len(photos)
                 if photos:
-                    thumbnail_url = url_for(
-                        "static", filename=f"uploads/{staff_name}/{photos[0]}"
-                    )
-                    profiles.append({
-                        "name":        staff_name,
-                        "photo_count": len(photos),
-                        "thumbnail":   thumbnail_url,
-                    })
+                    thumbnail_url = url_for("static", filename=f"uploads/{staff_name}/{photos[0]}")
+            profiles.append({
+                "id":          row["id"],
+                "name":        staff_name,
+                "email":       row["email"],
+                "phone":       row["phone"],
+                "address":     row["address"],
+                "communication": row["communication"] or "",
+                "status":      row["status"] or "active",
+                "photo_count": photo_count,
+                "thumbnail":   thumbnail_url,
+            })
+    except Exception as e:
+        log.error("Failed to load staff profiles from DB: %s", e)
+    finally:
+        if conn:
+            conn.close()
+
     return jsonify({"profiles": profiles})
 
 
@@ -217,12 +297,41 @@ def api_staff_profile(staff_name: str):
     if request.method == "DELETE":
         if os.path.isdir(staff_dir):
             shutil.rmtree(staff_dir)
-            return jsonify({"success": True})
-        return jsonify({"error": "Staff not found"}), 404
+            
+        try:
+            conn = get_db_connection()
+            cur = conn.cursor()
+            cur.execute("DELETE FROM staff_profiles WHERE name = %s", (staff_name,))
+            conn.commit()
+        except Exception as e:
+            log.error("Error deleting staff from DB: %s", e)
+        finally:
+            if conn:
+                conn.close()
+                
+        return jsonify({"success": True})
 
     # GET
     if not os.path.isdir(staff_dir):
         return jsonify({"error": "Staff not found"}), 404
+        
+    staff_data = {"name": staff_name, "email": "", "phone": "", "address": "", "communication": ""}
+    try:
+        conn = get_db_connection()
+        cur = conn.cursor()
+        cur.execute("SELECT email, phone, address, communication FROM staff_profiles WHERE name = %s", (staff_name,))
+        row = cur.fetchone()
+        if row:
+            staff_data["email"] = row["email"] or ""
+            staff_data["phone"] = row["phone"] or ""
+            staff_data["address"] = row["address"] or ""
+            staff_data["communication"] = row["communication"] or "" 
+            log.info("Loaded staff data with communication: %s", staff_data["communication"])
+    except Exception as e:
+        log.error("DB Error fetching single staff: %s", e)
+    finally:
+        if conn:
+            conn.close()
 
     photos = [
         f for f in os.listdir(staff_dir)
@@ -235,8 +344,31 @@ def api_staff_profile(staff_name: str):
         }
         for p in photos
     ]
-    return jsonify({"staff": staff_name, "photos": urls})
+    return jsonify({"staff": staff_data, "photos": urls})
 
+
+@api_bp.route("/api/staff_profiles/<staff_name>/toggle", methods=["POST"])
+@login_required
+def api_toggle_staff_status(staff_name: str):
+    """Toggle staff status between active and inactive."""
+    try:
+        conn = get_db_connection()
+        cur = conn.cursor()
+        cur.execute("SELECT status FROM staff_profiles WHERE name = %s", (staff_name,))
+        row = cur.fetchone()
+        if not row:
+            return jsonify({"success": False, "error": "Staff not found"}), 404
+        
+        new_status = "inactive" if row["status"] == "active" else "active"
+        cur.execute("UPDATE staff_profiles SET status = %s WHERE name = %s", (new_status, staff_name))
+        conn.commit()
+        return jsonify({"success": True, "new_status": new_status})
+    except Exception as e:
+        log.error("Error toggling staff status: %s", e)
+        return jsonify({"success": False, "error": str(e)}), 500
+    finally:
+        if conn:
+            conn.close()
 
 @api_bp.route("/api/staff_profiles/<staff_name>/<filename>", methods=["DELETE"])
 @login_required

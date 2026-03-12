@@ -31,6 +31,6 @@ torchaudio>=2.0.0
 pytorchvideo>=0.1.5
 
 # ─── Database ─────────────────────────────────────────────────────────────────
-# Using Python's built-in sqlite3 — no external package needed
+# PostgreSQL is the required database
 python-dotenv>=1.0.0
 psycopg2-binary>=2.9.9

@@ -1,0 +1,61 @@
+{% extends "base.html" %}
+{% set active_page = 'settings' %}
+
+{% block content %}
+<div style="height: calc(100vh - 53px); overflow-y: auto; background: var(--bg); padding: 28px;">
+<div style="background: var(--surface); border-radius: 14px; border: 1px solid var(--border); box-shadow: var(--shadow-sm); padding: 32px 40px; min-height: calc(100vh - 53px - 56px);">
+
+  <a href="/settings" class="s-back">‹ Back to Settings</a>
+  <h2 class="s-mod-title">Integrations Hub</h2>
+  <p class="s-mod-sub">Connect external services for alerts and cloud access.</p>
+
+  <div style="margin-top:28px; display:grid; grid-template-columns:1fr 1fr; gap:40px;">
+    <!-- Telegram -->
+    <div style="background: var(--surface2); padding:24px; border-radius:12px; border:1px solid var(--border);">
+      <h4 style="margin-bottom:16px; font-size:15px; display:flex; align-items:center; gap:8px; color: var(--text);">🔔 Telegram Bot Settings</h4>
+      <div class="s-field"><label>Bot Token</label><input type="password" id="setting-tg-token" placeholder="Enter Bot API Token" /></div>
+      <div class="s-field"><label>Target Chat IDs (comma separated)</label><input type="text" id="setting-tg-chats" placeholder="e.g. 1234567, -9876543" /></div>
+      <button onclick="saveGlobalSettings()" style="width:100%; padding:10px; background: var(--accent); color:white; border:none; border-radius:8px; font-weight:700; cursor:pointer;">Save Telegram Settings</button>
+    </div>
+
+    <!-- Imou -->
+    <div style="background: var(--surface2); padding:24px; border-radius:12px; border:1px solid var(--border);">
+      <h4 style="margin-bottom:16px; font-size:15px; display:flex; align-items:center; gap:8px; color: var(--text);">☁️ Imou Cloud Access</h4>
+      <div class="s-field"><label>App ID</label><input type="text" id="setting-appid" readonly /></div>
+      <p style="font-size:11px; color: var(--muted); line-height:1.4;">Imou credentials are managed in your account configuration. Contact support to change these values.</p>
+    </div>
+  </div>
+
+</div>
+</div>
+
+<style>
+.s-back { display:inline-block; background:none; border: 1px solid var(--border); padding: 8px 16px; border-radius: 8px; font-size: 13px; font-weight: 600; color: var(--muted); cursor: pointer; margin-bottom: 24px; transition: all 0.2s; text-decoration:none; }
+.s-back:hover { border-color: var(--accent); color: var(--accent); }
+.s-mod-title { font-size: 22px; font-weight: 800; color: var(--text); margin:0 0 6px 0; }
+.s-mod-sub { font-size: 13px; color: var(--muted); margin:0; }
+.s-field { margin-bottom: 16px; }
+.s-field label { display: block; font-size: 12px; font-weight: 600; color: var(--text); margin-bottom: 4px; }
+.s-field input { width: 100%; padding: 8px 12px; border: 1px solid var(--border); border-radius: 6px; font-size: 13px; outline: none; background: var(--bg); color: var(--text); }
+.s-field input:focus { border-color: var(--accent); }
+</style>
+
+<script>
+  document.addEventListener('DOMContentLoaded', loadGlobalSettings);
+
+  async function loadGlobalSettings() {
+    try {
+      const res = await fetch('/api/settings_info');
+      const data = await res.json();
+      document.getElementById('setting-appid').value = data.app_id||'';
+      document.getElementById('setting-tg-token').value = data.tg_token||'';
+      document.getElementById('setting-tg-chats').value = data.tg_chats||'';
+    } catch (e) {}
+  }
+
+  async function saveGlobalSettings() {
+    // Note: You'll need to define the API endpoint for saving if it doesn't exist
+    alert("Save logic to be implemented or matched with existing API");
+  }
+</script>
+{% endblock %}

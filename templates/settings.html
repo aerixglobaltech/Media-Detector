@@ -1,694 +1,794 @@
 {% extends "base.html" %}
+{% set active_page = 'settings' %}
 
 {% block content %}
+<div id="view-settings" style="height: calc(100vh - 53px); overflow-y: auto; background: var(--bg); padding: 28px;">
+<div style="background: white; border-radius: 14px; border: 1px solid var(--border); box-shadow: var(--shadow-sm); padding: 32px 40px; min-height: calc(100vh - 53px - 56px);">
+
+  <!-- ── Page Header ── -->
+  <div style="margin-bottom: 24px;">
+    <div style="display:flex; align-items:center; gap:12px; margin-bottom:6px;">
+      <span style="font-size:24px;">⚙</span>
+      <h1 style="font-size:22px; font-weight:800; color:#111827; margin:0;">Settings</h1>
+    </div>
+    <p style="font-size:13px; color:#6b7280; margin:0;">Manage all system configurations and preferences in one place</p>
+  </div>
+
+  <!-- ── Pill Tab Bar ── -->
+  <div class="s-pill-tabs" id="settings-nav">
+    <button class="s-pill active" onclick="showCat(event,'cat-general')">General</button>
+    <button class="s-pill" onclick="showCat(event,'cat-cameras')">Cameras</button>
+    <button class="s-pill" onclick="showCat(event,'cat-integrations')">Integrations</button>
+    <button class="s-pill" onclick="showCat(event,'cat-system')">System</button>
+  </div>
+
+  <!-- ══ GENERAL ══ -->
+  <div id="cat-general" class="s-cat active">
+
+    <div class="s-section-header">
+      <div class="s-section-title">Account Settings</div>
+      <div class="s-section-sub">Configure your profile and access preferences</div>
+    </div>
+    <div class="s-card-grid">
+      <div class="s-card" onclick="openMod('mod-profile','cat-general')">
+        <div class="s-card-icon">👤</div>
+        <div class="s-card-body">
+          <div class="s-card-title">My Profile</div>
+          <div class="s-card-desc">View your name, email, and organization details</div>
+        </div>
+        <div class="s-card-arrow">›</div>
+      </div>
+      <div class="s-card" onclick="openMod('mod-upload','cat-general')">
+        <div class="s-card-icon">📸</div>
+        <div class="s-card-body">
+          <div class="s-card-title">Staff Photos</div>
+          <div class="s-card-desc">Upload and manage staff recognition profiles</div>
+        </div>
+        <div class="s-card-arrow">›</div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- ══ CAMERAS ══ -->
+  <div id="cat-cameras" class="s-cat">
+    <div class="s-section-header">
+      <div class="s-section-title">Camera Management</div>
+      <div class="s-section-sub">Add and manage your surveillance cameras</div>
+    </div>
+    <div class="s-card-grid">
+      <div class="s-card" onclick="openMod('mod-local-cam','cat-cameras')">
+        <div class="s-card-icon">📷</div>
+        <div class="s-card-body">
+          <div class="s-card-title">Local IP Cameras</div>
+          <div class="s-card-desc">Add RTSP cameras from your local network</div>
+        </div>
+        <div class="s-card-arrow">›</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══ INTEGRATIONS ══ -->
+  <div id="cat-integrations" class="s-cat">
+    <div class="s-section-header">
+      <div class="s-section-title">Third-Party Integrations</div>
+      <div class="s-section-sub">Connect external services and APIs</div>
+    </div>
+    <div class="s-card-grid">
+      <div class="s-card" onclick="openMod('mod-global','cat-integrations')">
+        <div class="s-card-icon">🔔</div>
+        <div class="s-card-body">
+          <div class="s-card-title">Telegram Alerts</div>
+          <div class="s-card-desc">Configure Telegram bot notifications</div>
+        </div>
+        <div class="s-card-arrow">›</div>
+      </div>
+      <div class="s-card" onclick="openMod('mod-imou','cat-integrations')">
+        <div class="s-card-icon">☁️</div>
+        <div class="s-card-body">
+          <div class="s-card-title">Imou Cloud</div>
+          <div class="s-card-desc">View Imou cloud connection credentials</div>
+        </div>
+        <div class="s-card-arrow">›</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══ SYSTEM ══ -->
+  <div id="cat-system" class="s-cat">
+    <div class="s-section-header">
+      <div class="s-section-title">System Configuration</div>
+      <div class="s-section-sub">Application diagnostics and advanced settings</div>
+    </div>
+    <div class="s-card-grid">
+      <div class="s-card" style="opacity:0.5; cursor:default;">
+        <div class="s-card-icon">🛡️</div>
+        <div class="s-card-body">
+          <div class="s-card-title">Security</div>
+          <div class="s-card-desc">Session and access control</div>
+        </div>
+        <span style="font-size:10px; background:#f3f4f6; color:#9ca3af; padding:3px 8px; border-radius:20px; font-weight:700;">Soon</span>
+      </div>
+      <div class="s-card" style="opacity:0.5; cursor:default;">
+        <div class="s-card-icon">📊</div>
+        <div class="s-card-body">
+          <div class="s-card-title">System Logs</div>
+          <div class="s-card-desc">View activity and error logs</div>
+        </div>
+        <span style="font-size:10px; background:#f3f4f6; color:#9ca3af; padding:3px 8px; border-radius:20px; font-weight:700;">Soon</span>
+      </div>
+    </div>
+  </div>
+
+
+  <!-- ══════ MODULE DETAIL PAGES ══════ -->
+
+  <!-- My Profile -->
+  <div id="mod-profile" class="s-mod-page">
+    <button class="s-back" id="back-mod-profile">‹ Back to Settings</button>
+    <h2 class="s-mod-title">My Profile</h2>
+    <p class="s-mod-sub">View your system identity and company information.</p>
+    <div style="max-width:560px; margin-top:28px;">
+      <div class="s-field"><label>Full Name</label><input type="text" id="profile-name" readonly /></div>
+      <div class="s-field"><label>Email Address</label><input type="text" id="profile-email" readonly /></div>
+      <div class="s-field"><label>Company / Organization</label><input type="text" id="profile-company" readonly /></div>
+    </div>
+  </div>
+
+  <!-- Staff Directory (Index) -->
+  <div id="mod-upload" class="s-mod-page">
+    <button class="s-back" id="back-mod-upload">‹ Back to Settings</button>
+    <div style="display:flex; justify-content:space-between; align-items:center;">
+      <div>
+        <h2 class="s-mod-title">Staff Directory</h2>
+        <p class="s-mod-sub">Manage staff recognition profiles</p>
+      </div>
+      <button class="upload-btn" onclick="openStaffCreate()" style="margin:0; background:#2563eb; color:white; border:none; padding:10px 20px;">+ Create Staff</button>
+    </div>
+    
+    <hr style="border:0; border-top:1px solid #e5e7eb; margin:24px 0;">
+    <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:16px;">
+      <h3 style="font-size:16px; font-weight:700;">Saved Staff Profiles</h3>
+      <div style="position:relative; width:300px;">
+        <span style="position:absolute; left:12px; top:50%; transform:translateY(-50%); font-size:14px; color:#9ca3af;">🔍</span>
+        <input type="text" id="staff-search-input" placeholder="Search by name or phone..." 
+               style="width:100%; padding:8px 12px 8px 36px; font-size:13px; border:1px solid #d1d5db; border-radius:8px;"
+               onkeyup="filterStaff()">
+      </div>
+    </div>
+    <div id="saved-staff-gallery" class="staff-gallery"></div>
+  </div>
+
+  <!-- Create / Edit Staff -->
+  <div id="mod-staff-create" class="s-mod-page">
+    <button class="s-back" onclick="closeStaffCreate()">‹ Back to Directory</button>
+    <div style="display:flex; justify-content:space-between; align-items:center;">
+      <div>
+        <h2 class="s-mod-title" id="staff-form-title">Create New Staff</h2>
+        <p class="s-mod-sub" id="staff-form-sub">Enter staff details and upload reference photos.</p>
+      </div>
+    </div>
+    
+    <div style="margin-top:28px; display:grid; grid-template-columns:1fr 1fr; gap:30px;">
+      <div style="background:#f9fafb; padding:24px; border-radius:12px; border:1px solid #e5e7eb;">
+        <h4 style="margin-bottom:16px; font-size:15px;">Staff Details</h4>
+        <div class="s-field"><label>Full Name *</label><input type="text" id="staff-name-input" placeholder="e.g. John Doe" /></div>
+        <div class="s-field"><label>Email Address</label><input type="email" id="staff-email-input" placeholder="john@example.com" /></div>
+        <div class="s-field"><label>Phone Number</label><input type="text" id="staff-phone-input" placeholder="+1 234 567 890" /></div>
+        <div class="s-field"><label>Address / Department</label><input type="text" id="staff-address-input" placeholder="Engineering Dept..." /></div>
+
+        <div style="margin-top:24px; border-top:1px solid #e5e7eb; padding-top:20px;">
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+            <h4 style="font-size:14px; margin:0;">Communication Details</h4>
+            <button type="button" onclick="addCommGroup()" style="background:#f3f4f6; border:1px solid #d1d5db; border-radius:6px; padding:4px 10px; font-size:11px; font-weight:700; cursor:pointer;">+ Add New</button>
+          </div>
+          <div id="comm-groups-container"></div>
+        </div>
+      </div>
+      <div>
+        <div class="s-field">
+          <label>Select Reference Photos *</label>
+          <div class="upload-area" onclick="document.getElementById('file-upload').click()">
+            <div class="upload-icon">📸</div>
+            <p style="font-size:14px; font-weight:500; margin-bottom:4px;">Click to select photos</p>
+            <p style="font-size:12px; color:#6b7280;">JPG, PNG — 5 to 10 images recommended</p>
+            <input type="file" id="file-upload" multiple accept="image/png,image/jpeg" style="display:none;" onchange="handleFileSelect(event)">
+          </div>
+        </div>
+        
+        <div id="existing-photos-container" style="display:none; margin-top:24px;">
+          <h4 style="font-size:14px; margin-bottom:8px;">Existing Photos</h4>
+          <div id="existing-files-preview" style="display:block;"></div>
+        </div>
+
+        <div id="selected-files-preview" style="display:block; margin-top:12px;"></div>
+        <button class="upload-btn" id="submit-upload-btn" onclick="uploadStaffPhotos()" style="margin-top:20px; width:100%;">Save Staff Profile</button>
+        <div id="upload-status" style="margin-top:14px; font-size:13px; font-weight:500;"></div>
+      </div>
+    </div>
+  </div>
+
+
+  <!-- Local Cameras -->
+  <div id="mod-local-cam" class="s-mod-page">
+    <button class="s-back" id="back-mod-local-cam">‹ Back to Settings</button>
+    <h2 class="s-mod-title">Local IP Cameras</h2>
+    <p class="s-mod-sub">Add RTSP cameras (Hikvision, CP Plus, Dahua, etc.) from your local network.</p>
+    <div style="display:grid; grid-template-columns:1fr 1fr; gap:30px; margin-top:28px;">
+      <div style="background:#f9fafb; padding:24px; border-radius:12px; border:1px solid #e5e7eb;">
+        <h4 style="margin-bottom:16px; color:#2563eb; font-size:15px;">Add New Camera</h4>
+        <div class="s-field"><label>Camera Name</label><input type="text" id="lcam-name" placeholder="Front Door" /></div>
+        <div class="s-field">
+          <label>Brand</label>
+          <select id="lcam-brand" style="width:100%;padding:10px;background:white;border:1px solid #d1d5db;border-radius:8px;font-size:14px;">
+            <option>Generic / Other</option><option>Hikvision</option><option>CP Plus</option><option>Dahua</option><option>Aeriqs</option>
+          </select>
+        </div>
+        <div class="s-field"><label>IP Address</label><input type="text" id="lcam-ip" placeholder="192.168.1.100" /></div>
+        <div class="s-field"><label>Port (RTSP)</label><input type="number" id="lcam-port" value="554" /></div>
+        <div class="s-field"><label>Username</label><input type="text" id="lcam-user" placeholder="admin" /></div>
+        <div class="s-field"><label>Password</label><input type="password" id="lcam-pass" placeholder="••••••••" /></div>
+        <div class="s-field"><label>Stream Path</label><input type="text" id="lcam-path" placeholder="/Streaming/Channels/101" /></div>
+        <button class="upload-btn" style="width:100%; margin-top:8px;" onclick="addLocalCamera()">Add Camera</button>
+      </div>
+      <div>
+        <h4 style="font-size:15px; font-weight:700; margin-bottom:16px;">Saved Cameras</h4>
+        <div id="local-cam-list"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Telegram -->
+  <div id="mod-global" class="s-mod-page">
+    <button class="s-back" id="back-mod-global">‹ Back to Settings</button>
+    <h2 class="s-mod-title">Telegram Notification Settings</h2>
+    <p class="s-mod-sub">Current Telegram bot credentials (read-only). Edit the .env file to change.</p>
+    <div style="max-width:560px; margin-top:28px; background:#f9fafb; padding:24px; border-radius:12px; border:1px solid #e5e7eb;">
+      <div class="s-field"><label>Telegram Bot Token</label><input type="text" id="setting-tg-token" placeholder="Bot Token..." readonly /></div>
+      <div class="s-field"><label>Telegram Chat IDs</label><input type="text" id="setting-tg-chats" placeholder="Comma separated IDs..." readonly /></div>
+      <p style="font-size:12px; color:#6b7280; margin-top:12px;">* Edit <code>.env</code> on the server to update credentials.</p>
+    </div>
+  </div>
+
+  <!-- Imou -->
+  <div id="mod-imou" class="s-mod-page">
+    <button class="s-back" id="back-mod-imou">‹ Back to Settings</button>
+    <h2 class="s-mod-title">Imou Cloud Integration</h2>
+    <p class="s-mod-sub">Your Imou App ID and connection details.</p>
+    <div style="max-width:560px; margin-top:28px; background:#f9fafb; padding:24px; border-radius:12px; border:1px solid #e5e7eb;">
+      <div class="s-field"><label>Imou App ID</label><input type="text" id="setting-appid" placeholder="e.g. lcfdd4..." readonly /></div>
+      <p style="font-size:12px; color:#6b7280; margin-top:12px;">* Edit <code>.env</code> on the server to update credentials.</p>
+    </div>
+  </div>
+
+
+  <!-- Modals (Staff Photo modal removed, now done inline in edit) -->
+</div><!-- /content wrapper -->
+</div><!-- /view-settings -->
+
+
 <style>
-  .settings-layout {
-    padding: 40px;
-    width: 100%;
-    min-height: 100%;
-  }
+/* ─── Pill Tabs ─── */
+.s-pill-tabs {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 4px;
+  background: #f3f4f6;
+  padding: 5px;
+  border-radius: 10px;
+  width: 100%;
+  margin-bottom: 36px;
+}
+.s-pill {
+  background: none;
+  border: none;
+  padding: 10px 20px;
+  border-radius: 7px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #6b7280;
+  cursor: pointer;
+  transition: all 0.2s;
+  text-align: center;
+}
+.s-pill:hover { color: #111827; }
+.s-pill.active { background: white; color: #111827; box-shadow: 0 1px 4px rgba(0,0,0,0.1); }
 
-  .settings-card {
-    background: var(--card-bg, rgba(13, 19, 33, 0.4));
-    border: 1px solid var(--border);
-    border-radius: 20px;
-    padding: 40px;
-    box-shadow: 0 10px 40px rgba(0, 0, 0, 0.3);
-    width: 100%;
-    min-height: calc(100vh - 180px);
-  }
+/* ─── Category ─── */
+.s-cat { display: none; }
+.s-cat.active { display: block; }
 
-  .settings-tabs {
-    display: flex;
-    gap: 15px;
-    border-bottom: 1px solid var(--border);
-    margin-bottom: 25px;
-    padding-bottom: 5px;
-  }
+/* ─── Section Header ─── */
+.s-section-header { margin-bottom: 16px; }
+.s-section-title { font-size: 16px; font-weight: 700; color: #111827; }
+.s-section-sub { font-size: 13px; color: #6b7280; margin-top: 3px; }
 
-  .settings-tab {
-    padding: 10px 20px;
-    cursor: pointer;
-    font-size: 14px;
-    font-weight: 500;
-    color: var(--muted);
-    transition: all 0.2s;
-    border-bottom: 2px solid transparent;
-  }
+/* ─── Card Grid ─── */
+.s-card-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 14px;
+}
+.s-card {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  padding: 18px 20px;
+  background: white;
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+  cursor: pointer;
+  transition: all 0.2s;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+}
+.s-card:hover {
+  border-color: #2563eb;
+  box-shadow: 0 4px 12px rgba(37,99,235,0.1);
+  transform: translateY(-1px);
+}
+.s-card-icon {
+  width: 40px;
+  height: 40px;
+  background: #eff6ff;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+  flex-shrink: 0;
+}
+.s-card-body { flex: 1; }
+.s-card-title { font-size: 14px; font-weight: 700; color: #111827; }
+.s-card-desc { font-size: 12px; color: #6b7280; margin-top: 4px; line-height: 1.5; }
+.s-card-arrow { font-size: 20px; color: #9ca3af; margin-left: 4px; }
 
-  .settings-tab:hover {
-    color: var(--text);
-  }
+/* ─── Module Pages ─── */
+.s-mod-page { display: none; }
+.s-mod-page.active { display: block; }
+.s-back {
+  background: none;
+  border: 1px solid #e5e7eb;
+  padding: 8px 16px;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #6b7280;
+  cursor: pointer;
+  margin-bottom: 24px;
+  transition: all 0.2s;
+}
+.s-back:hover { border-color: #2563eb; color: #2563eb; }
+.s-mod-title { font-size: 22px; font-weight: 800; color: #111827; margin-bottom: 6px; }
+.s-mod-sub { font-size: 13px; color: #6b7280; }
 
-  .settings-tab.active {
-    color: var(--accent);
-    border-bottom-color: var(--accent);
-  }
+/* ─── Form Fields ─── */
+.s-field { margin-bottom: 18px; }
+.s-field label { display: block; font-size: 13px; font-weight: 600; color: #374151; margin-bottom: 6px; }
+.s-field input {
+  width: 100%;
+  padding: 10px 14px;
+  border: 1px solid #d1d5db;
+  border-radius: 8px;
+  font-size: 14px;
+  color: #111827;
+  background: white;
+  outline: none;
+  transition: border-color 0.2s;
+}
+.s-field input:focus { border-color: #2563eb; }
+.s-field input[readonly] { background: #f9fafb; color: #6b7280; }
 
-  .settings-content-pane {
-    display: none;
-  }
+/* Card Menu & Toggle */
+.card-menu-btn {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  background: #f3f4f6;
+  border: 1px solid #e5e7eb;
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 6px;
+  color: #6b7280;
+  cursor: pointer;
+  z-index: 10;
+  transition: all 0.2s;
+}
+.card-menu-btn:hover { background: #e5e7eb; color: #111827; }
 
-  .settings-content-pane.active {
-    display: block;
-    animation: fadeIn 0.3s ease-out;
-  }
+.card-dropdown {
+  position: absolute;
+  top: 42px;
+  right: 10px;
+  background: white;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+  z-index: 100;
+  display: none;
+  min-width: 160px;
+  overflow: hidden;
+  text-align: left;
+}
+.card-dropdown.active { display: block !important; }
 
-  @keyframes fadeIn {
-    from {
-      opacity: 0;
-      transform: translateY(5px);
-    }
+.card-dropdown-item {
+  padding: 10px 14px;
+  font-size: 13px;
+  color: #374151;
+  cursor: pointer;
+  display: flex !important;
+  align-items: center;
+  gap: 10px;
+  border-bottom: 1px solid #f3f4f6;
+  background: white;
+}
+.card-dropdown-item:last-child { border-bottom: none; }
+.card-dropdown-item:hover { background: #f9fafb; color: #2563eb; }
 
-    to {
-      opacity: 1;
-      transform: translateY(0);
-    }
-  }
-
-  .settings-row {
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-    margin-bottom: 20px;
-  }
-
-  .settings-row label {
-    font-size: 13px;
-    font-weight: 600;
-    color: var(--muted);
-    text-transform: uppercase;
-    letter-spacing: 0.5px;
-  }
-
-  .settings-row input {
-    background: var(--surface);
-    border: 1px solid var(--border);
-    border-radius: 8px;
-    padding: 12px 15px;
-    color: var(--text);
-    font-size: 15px;
-    transition: all 0.2s;
-  }
-
-  .settings-row input:focus {
-    outline: none;
-    border-color: var(--accent);
-    box-shadow: 0 0 0 2px rgba(139, 92, 246, 0.2);
-  }
-
-  .upload-area {
-    border: 2px dashed var(--border);
-    border-radius: 12px;
-    padding: 40px;
-    text-align: center;
-    cursor: pointer;
-    transition: all 0.2s;
-    background: rgba(255, 255, 255, 0.02);
-  }
-
-  .upload-area:hover {
-    border-color: var(--accent);
-    background: rgba(139, 92, 246, 0.05);
-  }
-
-  .upload-icon {
-    font-size: 32px;
-    margin-bottom: 15px;
-    color: var(--accent);
-  }
-
-  .upload-btn {
-    background: var(--accent);
-    color: white;
-    border: none;
-    border-radius: 8px;
-    padding: 12px 25px;
-    font-weight: 600;
-    cursor: pointer;
-    transition: all 0.2s;
-    margin-top: 10px;
-  }
-
-  .upload-btn:hover {
-    filter: brightness(1.1);
-    transform: translateY(-2px);
-  }
-
-  .upload-btn:disabled {
-    background: var(--muted);
-    cursor: not-allowed;
-    transform: none;
-  }
-
-  /* Modal */
-  .modal-overlay {
-    position: fixed;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
-    background: rgba(0, 0, 0, 0.85);
-    backdrop-filter: blur(8px);
-    display: none;
-    z-index: 2000;
-    align-items: center;
-    justify-content: center;
-  }
-
-  .modal-overlay.active {
-    display: flex;
-  }
-
-  .modal-card {
-    background: var(--card-bg);
-    border: 1px solid var(--border);
-    width: 90%;
-    max-width: 800px;
-    max-height: 80vh;
-    border-radius: 20px;
-    padding: 30px;
-    overflow-y: auto;
-    position: relative;
-  }
-
-  .modal-close {
-    position: absolute;
-    top: 20px;
-    right: 20px;
-    background: none;
-    border: none;
-    color: var(--muted);
-    font-size: 24px;
-    cursor: pointer;
-  }
-
-  .gallery-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
-    gap: 15px;
-    margin-top: 25px;
-  }
-
-  .gallery-item {
-    position: relative;
-    border-radius: 10px;
-    overflow: hidden;
-    aspect-ratio: 1;
-    border: 1px solid var(--border);
-  }
-
-  .gallery-item img {
-    width: 100%;
-    height: 100%;
-    object-fit: cover;
-  }
-
-  .gallery-item .del-btn {
-    position: absolute;
-    bottom: 5px;
-    right: 5px;
-    background: var(--red);
-    color: white;
-    border: none;
-    border-radius: 4px;
-    padding: 4px 8px;
-    font-size: 10px;
-    cursor: pointer;
-    opacity: 0;
-    transition: opacity 0.2s;
-  }
-
-  .gallery-item:hover .del-btn {
-    opacity: 1;
-  }
+input:checked + .slider { background-color: #10b981; }
+input:checked + .slider:before { transform: translateX(14px); }
 </style>
 
-<div id="view-settings" class="settings-layout" style="display:block;">
-  <div class="settings-card" style="max-width: 100%;">
-
-    <div class="settings-tabs">
-      <div class="settings-tab active" onclick="switchSettingsTab('profile')">My Profile</div>
-      <div class="settings-tab" onclick="switchSettingsTab('upload')">Upload Image</div>
-      <div class="settings-tab" onclick="switchSettingsTab('local-cam')">Local Cameras</div>
-      <div class="settings-tab" onclick="switchSettingsTab('global')">Global Settings</div>
-    </div>
-
-    <!-- 1. Profile Tab -->
-    <div id="tab-profile" class="settings-content-pane active">
-      <div style="margin-bottom: 20px;">
-        <h3 style="font-size: 16px; margin-bottom: 8px; color: var(--text);">Account Profile</h3>
-        <p style="font-size: 13px; color: var(--muted);">View your system identity and company information.</p>
-      </div>
-
-      <div class="settings-row">
-        <label>Full Name</label>
-        <input type="text" id="profile-name" readonly style="background: rgba(255,255,255,0.05);" />
-      </div>
-      <div class="settings-row" style="margin-top: 20px;">
-        <label>Email Address</label>
-        <input type="text" id="profile-email" readonly style="background: rgba(255,255,255,0.05);" />
-      </div>
-      <div class="settings-row" style="margin-top: 20px;">
-        <label>Company / Organization</label>
-        <input type="text" id="profile-company" readonly style="background: rgba(255,255,255,0.05);" />
-      </div>
-    </div>
-
-    <!-- 2. Upload Tab -->
-    <div id="tab-upload" class="settings-content-pane">
-      <div style="margin-bottom: 20px;">
-        <h3 style="font-size: 16px; margin-bottom: 8px; color: var(--text);">Staff Photo Upload</h3>
-        <p style="font-size: 13px; color: var(--muted);">Add new staff members by providing their name and 5-10
-          reference photos.</p>
-      </div>
-
-      <div class="settings-row">
-        <label>Staff Name</label>
-        <input type="text" id="staff-name-input" placeholder="e.g. John Doe" />
-      </div>
-
-      <div class="settings-row" style="margin-top: 20px;">
-        <label>Select Photos (Multiple)</label>
-        <div class="upload-area" onclick="document.getElementById('file-upload').click()">
-          <div class="upload-icon">📸</div>
-          <p style="font-size: 14px; font-weight: 500; color: var(--text); margin-bottom: 4px;">Click to select photos
-          </p>
-          <p style="font-size: 12px; color: var(--muted);">Supported formats: JPG, PNG (5-10 images recommended)</p>
-          <input type="file" id="file-upload" multiple accept="image/png, image/jpeg" style="display:none;"
-            onchange="handleFileSelect(event)">
-        </div>
-      </div>
-
-      <div id="selected-files-preview"
-        style="display: flex; gap: 10px; flex-wrap: wrap; margin-top: 15px; margin-bottom: 20px;">
-      </div>
-
-      <button class="upload-btn" id="submit-upload-btn" onclick="uploadStaffPhotos()">Upload Staff Profile</button>
-      <div id="upload-status" style="margin-top: 15px; font-size: 13px; font-weight: 500;"></div>
-
-      <hr style="border: 0; border-top: 1px solid var(--border); margin: 30px 0;">
-
-      <div style="margin-bottom: 20px;">
-        <h3 style="font-size: 16px; margin-bottom: 8px; color: var(--text);">Saved Staff Profiles</h3>
-        <button class="upload-btn" onclick="loadSavedStaff()" style="margin-top:0; padding: 6px 12px;">Refresh
-          List</button>
-      </div>
-      <div id="saved-staff-gallery"
-        style="display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 15px;">
-        <!-- Staff profiles will populate here -->
-      </div>
-    </div>
-
-    <!-- 3. Local Cameras Tab -->
-    <div id="tab-local-cam" class="settings-content-pane">
-      <div style="margin-bottom: 20px;">
-        <h3 style="font-size: 16px; margin-bottom: 8px; color: var(--text);">Manage Local IP Cameras</h3>
-        <p style="font-size: 13px; color: var(--muted);">Add RTSP cameras (Hikvision, CP Plus, etc.) from your local
-          network.</p>
-      </div>
-
-      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 30px;">
-        <!-- Add Camera Form -->
-        <div style="background: var(--surface); padding: 20px; border-radius: 10px; border: 1px solid var(--border);">
-          <h4 style="margin-bottom: 15px; color: var(--accent);">Add New Camera</h4>
-          <div class="settings-row">
-            <label>Camera Name</label>
-            <input type="text" id="lcam-name" placeholder="Front Door" />
-          </div>
-          <div class="settings-row" style="margin-top: 15px;">
-            <label>Brand</label>
-            <select id="lcam-brand"
-              style="width:100%; padding:10px; background:var(--surface2); color:var(--text); border:1px solid var(--border); border-radius:6px;">
-              <option value="Generic">Generic / Other</option>
-              <option value="Hikvision">Hikvision</option>
-              <option value="CP Plus">CP Plus</option>
-              <option value="Dahua">Dahua</option>
-              <option value="Aeriqs">Aeriqs</option>
-            </select>
-          </div>
-          <div class="settings-row" style="margin-top: 15px;">
-            <label>IP Address</label>
-            <input type="text" id="lcam-ip" placeholder="192.168.1.100" />
-          </div>
-          <div class="settings-row" style="margin-top: 15px;">
-            <label>Port (RTSP)</label>
-            <input type="number" id="lcam-port" value="554" />
-          </div>
-          <div class="settings-row" style="margin-top: 15px;">
-            <label>Username</label>
-            <input type="text" id="lcam-user" placeholder="admin" />
-          </div>
-          <div class="settings-row" style="margin-top: 15px;">
-            <label>Password</label>
-            <input type="password" id="lcam-pass" placeholder="••••••••" />
-          </div>
-          <div class="settings-row" style="margin-top: 15px;">
-            <label>Stream Path</label>
-            <input type="text" id="lcam-path" placeholder="/Streaming/Channels/101" />
-          </div>
-          <button class="upload-btn" style="width:100%; margin-top:20px;" onclick="addLocalCamera()">Add Camera</button>
-        </div>
-
-        <!-- Saved Cameras List -->
-        <div>
-          <h4 style="margin-bottom: 15px; color: var(--text);">Saved Local Cameras</h4>
-          <div id="local-cam-list" style="display: flex; flex-direction: column; gap: 10px;">
-            <!-- Loaded via JS -->
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <!-- 4. Global Settings Tab -->
-    <div id="tab-global" class="settings-content-pane">
-      <div class="settings-row">
-        <label>Imou App ID</label>
-        <input type="text" id="setting-appid" placeholder="e.g. lcfdd4..." readonly />
-      </div>
-      <div class="settings-row">
-        <label>Telegram App Token</label>
-        <input type="text" id="setting-tg-token" placeholder="Bot Token..." readonly />
-      </div>
-      <div class="settings-row">
-        <label>Telegram Receivers (Chat IDs)</label>
-        <input type="text" id="setting-tg-chats" placeholder="Comma separated IDs..." readonly />
-      </div>
-      <p style="font-size: 12px; color: var(--muted); margin-top: 20px;">
-        *Note: To modify these settings securely, please edit the <code>.env</code> file directly on the server to
-        avoid exposing secrets over the web UI.
-      </p>
-    </div>
-
-  </div>
-</div>
-
-<!-- Modal -->
-<div class="modal-overlay" id="staff-modal">
-  <div class="modal-card">
-    <button class="modal-close" onclick="closeStaffModal()">×</button>
-    <div style="display: flex; justify-content: space-between; align-items: center;">
-      <h2 id="modal-staff-name" style="color: var(--text);">Staff Name</h2>
-      <button class="upload-btn"
-        style="margin-top:0; border-color: var(--red); color: var(--red); background: rgba(239, 68, 68, 0.1);"
-        onclick="deleteStaffProfile()">Delete Profile</button>
-    </div>
-    <div id="modal-gallery" class="gallery-grid">
-      <!-- Photos load here -->
-    </div>
-  </div>
-</div>
 
 <script>
   let selectedFiles = [];
 
-  function switchSettingsTab(tabId) {
-    document.querySelectorAll('.settings-tab').forEach(el => el.classList.remove('active'));
-    document.querySelectorAll('.settings-content-pane').forEach(el => el.classList.remove('active'));
+  function showCat(e, catId) {
+    document.querySelectorAll('.s-pill').forEach(el => el.classList.remove('active'));
+    document.querySelectorAll('.s-cat').forEach(el => el.classList.remove('active'));
+    e.currentTarget.classList.add('active');
+    document.getElementById(catId).classList.add('active');
+  }
 
-    event.currentTarget.classList.add('active');
-    document.getElementById('tab-' + tabId).classList.add('active');
+  function openMod(modId, fromCatId) {
+    document.querySelectorAll('.s-cat').forEach(el => el.classList.remove('active'));
+    document.getElementById('settings-nav').style.display = 'none';
+    document.getElementById(modId).classList.add('active');
+    document.getElementById('back-' + modId).onclick = () => closeMod(modId, fromCatId);
 
-    if (tabId === 'upload') {
-      loadSavedStaff();
-    } else if (tabId === 'profile') {
-      loadUserProfile();
-    } else if (tabId === 'local-cam') {
-      loadLocalCameras();
-    }
+    if (modId === 'mod-profile') loadUserProfile();
+    else if (modId === 'mod-upload') loadSavedStaff();
+    else if (modId === 'mod-local-cam') loadLocalCameras();
+    else if (modId === 'mod-global' || modId === 'mod-imou') loadGlobalSettings();
+  }
+
+  function closeMod(modId, catId) {
+    document.getElementById(modId).classList.remove('active');
+    document.getElementById('settings-nav').style.display = 'flex';
+    document.getElementById(catId).classList.add('active');
+    const pillMap = {'cat-general':0,'cat-cameras':1,'cat-integrations':2,'cat-system':3};
+    document.querySelectorAll('.s-pill').forEach(el => el.classList.remove('active'));
+    document.querySelectorAll('.s-pill')[pillMap[catId]]?.classList.add('active');
   }
 
   async function loadLocalCameras() {
     const list = document.getElementById('local-cam-list');
-    list.innerHTML = '<p style="color:var(--muted); font-size:12px;">Loading cameras...</p>';
+    list.innerHTML = '<p style="color:#6b7280;font-size:12px;">Loading...</p>';
     try {
       const res = await fetch('/api/local_cameras');
       const data = await res.json();
-      if (!data.length) {
-        list.innerHTML = '<p style="color:var(--muted); font-size:13px; background:var(--surface); padding:15px; border-radius:8px; border:1px dashed var(--border);">No local cameras added yet.</p>';
-        return;
-      }
+      if (!data.length) { list.innerHTML = '<p style="color:#6b7280;font-size:13px;border:1px dashed #d1d5db;padding:16px;border-radius:8px;">No cameras added yet.</p>'; return; }
       list.innerHTML = data.map(c => `
-        <div style="background:var(--surface); padding:12px; border-radius:8px; border:1px solid var(--border); display:flex; justify-content:space-between; align-items:center;">
+        <div style="background:white;padding:14px;border-radius:10px;border:1px solid #e5e7eb;display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
           <div>
-            <div style="font-weight:600; color:var(--text);">${c.name}</div>
-            <div style="font-size:11px; color:var(--muted);">${c.brand} • ${c.ip}</div>
+            <div style="font-weight:600;color:#111827;">${c.name}</div>
+            <div style="font-size:11px;color:#6b7280;">${c.brand} • ${c.ip}</div>
           </div>
-          <button onclick="deleteLocalCamera(${c.id})" style="background:none; border:none; color:var(--red); cursor:pointer; font-size:12px; font-weight:bold; padding:5px;">Remove</button>
-        </div>
-      `).join('');
-    } catch (e) { list.innerHTML = 'Error loading list'; }
+          <button onclick="deleteLocalCamera(${c.id})" style="background:none;border:none;color:#ef4444;cursor:pointer;font-size:12px;font-weight:700;">Remove</button>
+        </div>`).join('');
+    } catch (e) { list.innerHTML = 'Error'; }
   }
 
   async function addLocalCamera() {
     const payload = {
-      name: document.getElementById('lcam-name').value,
-      brand: document.getElementById('lcam-brand').value,
-      ip: document.getElementById('lcam-ip').value,
-      port: parseInt(document.getElementById('lcam-port').value),
-      username: document.getElementById('lcam-user').value,
-      password: document.getElementById('lcam-pass').value,
+      name: document.getElementById('lcam-name').value, brand: document.getElementById('lcam-brand').value,
+      ip: document.getElementById('lcam-ip').value, port: parseInt(document.getElementById('lcam-port').value),
+      username: document.getElementById('lcam-user').value, password: document.getElementById('lcam-pass').value,
       path: document.getElementById('lcam-path').value
     };
-
-    if (!payload.name || !payload.ip) {
-      alert("Name and IP are required.");
-      return;
-    }
-
+    if (!payload.name || !payload.ip) { alert("Name and IP are required."); return; }
     try {
-      const res = await fetch('/api/local_cameras', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
-      });
+      const res = await fetch('/api/local_cameras', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(payload) });
       const data = await res.json();
-      if (data.success) {
-        loadLocalCameras();
-        // Clear form
-        document.getElementById('lcam-name').value = "";
-        document.getElementById('lcam-ip').value = "";
-        document.getElementById('lcam-user').value = "";
-        document.getElementById('lcam-pass').value = "";
-        document.getElementById('lcam-path').value = "";
-      } else {
-        alert("Failed to add: " + data.error);
-      }
+      if (data.success) { loadLocalCameras(); ['lcam-name','lcam-ip','lcam-user','lcam-pass','lcam-path'].forEach(id => document.getElementById(id).value=''); }
+      else alert("Failed: " + data.error);
     } catch (e) { alert("Network error"); }
   }
 
   async function deleteLocalCamera(id) {
-    if (!confirm("Are you sure?")) return;
-    try {
-      const res = await fetch('/api/local_cameras/' + id, { method: 'DELETE' });
-      const data = await res.json();
-      if (data.success) loadLocalCameras();
-    } catch (e) { alert("Error deleting"); }
+    if (!confirm("Remove this camera?")) return;
+    const res = await fetch('/api/local_cameras/'+id, {method:'DELETE'});
+    const data = await res.json();
+    if (data.success) loadLocalCameras();
   }
 
   async function loadUserProfile() {
+    ['profile-name','profile-email','profile-company'].forEach(id => document.getElementById(id).value='Loading...');
     try {
-      document.getElementById('profile-name').value = "Loading...";
-      document.getElementById('profile-email').value = "Loading...";
-      document.getElementById('profile-company').value = "Loading...";
-
       const res = await fetch('/api/user_profile');
       const data = await res.json();
-
       if (!data.error) {
-        document.getElementById('profile-name').value = data.name || "";
-        document.getElementById('profile-email').value = data.email || "";
-        document.getElementById('profile-company').value = data.company || "";
-      } else {
-        document.getElementById('profile-name').value = data.error;
-        document.getElementById('profile-email').value = "";
-        document.getElementById('profile-company').value = "";
+        document.getElementById('profile-name').value = data.name||'';
+        document.getElementById('profile-email').value = data.email||'';
+        document.getElementById('profile-company').value = data.company||'';
       }
-    } catch (e) {
-      document.getElementById('profile-name').value = "Error fetching profile";
-    }
+    } catch (e) {}
+  }
+
+  async function loadGlobalSettings() {
+    try {
+      const res = await fetch('/api/settings_info');
+      const data = await res.json();
+      if (document.getElementById('setting-appid')) document.getElementById('setting-appid').value = data.app_id||'';
+      if (document.getElementById('setting-tg-token')) document.getElementById('setting-tg-token').value = data.tg_token||'';
+      if (document.getElementById('setting-tg-chats')) document.getElementById('setting-tg-chats').value = data.tg_chats||'';
+    } catch (e) {}
   }
 
   function handleFileSelect(event) {
     selectedFiles = Array.from(event.target.files);
-    const previewContainer = document.getElementById('selected-files-preview');
-    previewContainer.innerHTML = '';
-
-    selectedFiles.forEach((file, index) => {
+    const preview = document.getElementById('selected-files-preview');
+    preview.innerHTML = '';
+    selectedFiles.forEach(file => {
       const reader = new FileReader();
-      reader.onload = function (e) {
-        const imgDiv = document.createElement('div');
-        imgDiv.style = "position:relative; width:60px; height:60px; border-radius:8px; overflow:hidden; border:1px solid var(--border);";
-        imgDiv.innerHTML = `<img src="${e.target.result}" style="width:100%; height:100%; object-fit:cover;">`;
-        previewContainer.appendChild(imgDiv);
-      }
+      reader.onload = e => {
+        const d = document.createElement('div');
+        d.style = "position:relative; display:inline-block; width:60px; height:60px; border-radius:8px; overflow:hidden; border:1px solid #e5e7eb; margin:0 10px 10px 0; vertical-align:top;";
+        d.innerHTML = `<img src="${e.target.result}" style="width:100%;height:100%;object-fit:cover;">`;
+        preview.appendChild(d);
+      };
       reader.readAsDataURL(file);
     });
   }
 
   async function uploadStaffPhotos() {
     const nameInput = document.getElementById('staff-name-input').value.trim();
-    const statusEl = document.getElementById('upload-status');
-
-    if (!nameInput) {
-      statusEl.style.color = "var(--red)";
-      statusEl.innerText = "❌ Please provide a staff name.";
-      return;
-    }
-    if (selectedFiles.length === 0) {
-      statusEl.style.color = "var(--red)";
-      statusEl.innerText = "❌ Please select at least 1 photo.";
-      return;
-    }
-
-    statusEl.style.color = "var(--accent)";
-    statusEl.innerText = "⏳ Uploading " + selectedFiles.length + " photos...";
-    document.getElementById('submit-upload-btn').disabled = true;
-
-    const formData = new FormData();
-    formData.append('staff_name', nameInput);
-    selectedFiles.forEach(file => {
-      formData.append('photos', file);
+    const emailInput = document.getElementById('staff-email-input').value.trim();
+    const phoneInput = document.getElementById('staff-phone-input').value.trim();
+    const addressInput = document.getElementById('staff-address-input').value.trim();
+    
+    // Collect Communication Data
+    const commData = [];
+    document.querySelectorAll('.comm-group').forEach(group => {
+      const gName = group.querySelector('.comm-name').value.trim();
+      const gPhone = group.querySelector('.comm-phone').value.trim();
+      if(gName || gPhone) commData.push({name: gName, phone: gPhone});
     });
 
-    try {
-      const res = await fetch('/api/upload_staff', {
-        method: 'POST',
-        body: formData
-      });
-      const data = await res.json();
+    const statusEl = document.getElementById('upload-status');
+    const isEditMode = currentEditStaff !== "";
+    
+    // Validate we're sending the correct original name for updates
+    const originalName = isEditMode ? currentEditStaff : "";
 
-      if (data.success) {
-        statusEl.style.color = "var(--green)";
-        statusEl.innerText = "✅ Successfully uploaded profile for " + nameInput;
-        document.getElementById('staff-name-input').value = '';
-        selectedFiles = [];
-        document.getElementById('selected-files-preview').innerHTML = '';
-        setTimeout(loadSavedStaff, 1000);
-      } else {
-        statusEl.style.color = "var(--red)";
-        statusEl.innerText = "❌ " + data.error;
-      }
-    } catch (err) {
-      statusEl.style.color = "var(--red)";
-      statusEl.innerText = "❌ Network error during upload.";
+    if (!nameInput) { statusEl.style.color="#ef4444"; statusEl.innerText="❌ Please provide a staff name."; return; }
+    if (!isEditMode && !selectedFiles.length) { statusEl.style.color="#ef4444"; statusEl.innerText="❌ Please select at least 1 photo."; return; }
+    statusEl.style.color="#2563eb"; statusEl.innerText= isEditMode ? "⏳ Updating profile..." : "⏳ Creating profile... ("+selectedFiles.length+" photos)";
+    document.getElementById('submit-upload-btn').disabled=true;
+    
+    const fd = new FormData();
+    fd.append('staff_name', nameInput);
+    if (isEditMode) {
+      fd.append('is_update', 'true');
+      fd.append('original_name', originalName);
     }
-
-    document.getElementById('submit-upload-btn').disabled = false;
+    fd.append('email', emailInput);
+    fd.append('phone', phoneInput);
+    fd.append('address', addressInput);
+    fd.append('communication', JSON.stringify(commData));
+    selectedFiles.forEach(f => fd.append('photos', f));
+    
+    try {
+      const res = await fetch('/api/upload_staff', {method:'POST', body:fd});
+      const data = await res.json();
+      if (data.success) {
+        statusEl.style.color="#10b981"; statusEl.innerText="✅ Profile Saved successfully.";
+        setTimeout(() => { closeStaffCreate(); loadSavedStaff(); }, 1500);
+      } else { statusEl.style.color="#ef4444"; statusEl.innerText="❌ "+data.error; }
+    } catch (e) { statusEl.style.color="#ef4444"; statusEl.innerText="❌ Network error."; }
+    document.getElementById('submit-upload-btn').disabled=false;
   }
 
+  function openStaffCreate() {
+    currentEditStaff = "";
+    document.getElementById('staff-form-title').innerText = "Create New Staff";
+    document.getElementById('staff-form-sub').innerText = "Enter staff details and upload reference photos.";
+    document.getElementById('submit-upload-btn').innerText = "Create Staff Profile";
+    document.getElementById('staff-name-input').readOnly = false;
+    document.getElementById('staff-name-input').value = "";
+    document.getElementById('staff-email-input').value = "";
+    document.getElementById('staff-phone-input').value = "";
+    document.getElementById('staff-address-input').value = "";
+    document.getElementById('comm-groups-container').innerHTML = "";
+    document.getElementById('existing-photos-container').style.display = "none";
+    document.getElementById('existing-files-preview').innerHTML = "";
+    
+    selectedFiles = [];
+    document.getElementById('selected-files-preview').innerHTML = '';
+    document.getElementById('upload-status').innerText = "";
+
+    document.getElementById('mod-upload').classList.remove('active');
+    document.getElementById('mod-staff-create').classList.add('active');
+  }
+  
+  function closeStaffCreate() {
+    document.getElementById('mod-staff-create').classList.remove('active');
+    document.getElementById('mod-upload').classList.add('active');
+  }
+
+  function addCommGroup(initialData = null) {
+    const container = document.getElementById('comm-groups-container');
+    const div = document.createElement('div');
+    div.className = 'comm-group';
+    div.style = "display:grid; grid-template-columns:1fr 1fr 34px; gap:10px; margin-bottom:10px; align-items:flex-end;";
+    div.innerHTML = `
+      <div class="s-field" style="margin:0;">
+        <label style="font-size:11px;">Name</label>
+        <input type="text" class="comm-name" placeholder="Contact Person" value="${initialData?.name || ''}" style="padding:6px 10px; font-size:12px;">
+      </div>
+      <div class="s-field" style="margin:0;">
+        <label style="font-size:11px;">Phone</label>
+        <input type="text" class="comm-phone" placeholder="Phone No" value="${initialData?.phone || ''}" style="padding:6px 10px; font-size:12px;">
+      </div>
+      <button type="button" onclick="this.parentElement.remove()" style="background:#fee2e2; border:1px solid #fecaca; color:#ef4444; border-radius:6px; height:31px; font-size:14px; cursor:pointer;">✕</button>
+    `;
+    container.appendChild(div);
+  }
+
+  let allStaff = [];
   async function loadSavedStaff() {
     const gallery = document.getElementById('saved-staff-gallery');
-    gallery.innerHTML = '<span style="color:var(--muted); font-size:12px;">Loading profiles...</span>';
-
+    gallery.innerHTML = '<span style="color:#6b7280;font-size:12px;">Loading...</span>';
     try {
       const res = await fetch('/api/staff_profiles');
       const data = await res.json();
+      allStaff = data.profiles || [];
+      renderStaffCards(allStaff);
+    } catch (e) { gallery.innerHTML='<span style="color:#ef4444;">Failed to load.</span>'; }
+  }
 
-      if (!data.profiles || data.profiles.length === 0) {
-        gallery.innerHTML = '<span style="color:var(--muted); font-size:12px;">No staff profiles saved yet.</span>';
-        return;
-      }
-
-      gallery.innerHTML = data.profiles.map(profile => {
-        return `
-          <div style="background:var(--surface); border:1px solid var(--border); border-radius:10px; padding:10px; text-align:center; cursor:pointer;" onclick="openStaffModal('${profile.name}')">
-            <div style="width:80px; height:80px; margin:0 auto 10px; border-radius:50%; overflow:hidden; border:2px solid var(--accent); opacity:0.8;">
-              <img src="${profile.thumbnail}" style="width:100%; height:100%; object-fit:cover;">
-            </div>
-            <div style="font-size:14px; font-weight:600; color:var(--text);">${profile.name}</div>
-            <div style="font-size:11px; color:var(--muted); margin-top:4px;">${profile.photo_count} Photos</div>
+  function renderStaffCards(profiles) {
+    const gallery = document.getElementById('saved-staff-gallery');
+    if (!profiles.length) { gallery.innerHTML='<span style="color:#6b7280;">No matches found.</span>'; return; }
+    
+    gallery.innerHTML = profiles.map(p=>`
+      <div style="background:white; border:1px solid #e5e7eb; border-radius:10px; padding:18px 14px; text-align:center; position:relative;" id="card-${p.name}">
+        <button class="card-menu-btn" onclick="toggleCardDropdown(event, '${p.name}')">⋮</button>
+        <div class="card-dropdown" id="dropdown-${p.name}">
+          <div class="card-dropdown-item" onclick="openStaffEdit('${p.name}')">
+            <span>👁️</span> View Profile
           </div>
-        `;
-      }).join('');
-    } catch (err) {
-      gallery.innerHTML = '<span style="color:var(--red); font-size:12px;">Failed to load profiles.</span>';
+          <div class="card-dropdown-item" onclick="toggleStaffStatus('${p.name}')">
+            <span>${p.status==='active'?'🚫':'✅'}</span> ${p.status==='active'?'Deactivate':'Activate'} Profile
+          </div>
+        </div>
+
+        <div style="width:72px; height:72px; margin:0 auto 10px; border-radius:50%; overflow:hidden; border:2px solid ${p.status==='active'?'#2563eb':'#9ca3af'}; opacity:${p.status==='active'?'1':'0.5'};">
+          <img src="${p.thumbnail || '/static/img/default-avatar.png'}" style="width:100%; height:100%; object-fit:cover;">
+        </div>
+        <div style="font-size:14px; font-weight:600; color:#111827; text-overflow:ellipsis; overflow:hidden; white-space:nowrap;">${p.name}</div>
+        <div style="font-size:11px; color:#6b7280; margin-top:2px;">${p.phone || (p.email || p.photo_count+' Photos')}</div>
+        <div style="margin-top:8px;">
+          <span style="font-size:9px; font-weight:700; text-transform:uppercase; padding:2px 8px; border-radius:10px; background:${p.status==='active'?'#ecfdf5':'#f3f4f6'}; color:${p.status==='active'?'#059669':'#6b7280'};">
+            ${p.status}
+          </span>
+        </div>
+      </div>`).join('');
+  }
+
+  function filterStaff() {
+    const q = document.getElementById('staff-search-input').value.toLowerCase();
+    const filtered = allStaff.filter(p => 
+      p.name.toLowerCase().includes(q) || (p.phone && p.phone.includes(q))
+    );
+    renderStaffCards(filtered);
+  }
+
+  function toggleCardDropdown(e, name) {
+    e.stopPropagation();
+    // Close others
+    document.querySelectorAll('.card-dropdown').forEach(d => {
+      if(d.id !== 'dropdown-'+name) d.classList.remove('active');
+    });
+    document.getElementById('dropdown-'+name).classList.toggle('active');
+  }
+
+  // Close dropdowns on outside click
+  window.addEventListener('click', () => {
+    document.querySelectorAll('.card-dropdown').forEach(d => d.classList.remove('active'));
+  });
+
+  async function toggleStaffStatus(name) {
+    try {
+      const res = await fetch('/api/staff_profiles/'+encodeURIComponent(name)+'/toggle', {method:'POST'});
+      const data = await res.json();
+      if (data.success) {
+        // Find in allStaff and update
+        const staff = allStaff.find(s => s.name === name);
+        if(staff) staff.status = data.new_status;
+        renderStaffCards(allStaff); // Re-render gallery
+      } else {
+        alert("Update failed: " + data.error);
+      }
+    } catch(e) {
+      alert("Network error");
     }
   }
 
-  let currentModalStaff = "";
-
-  async function openStaffModal(staffName) {
-    currentModalStaff = staffName;
-    document.getElementById('modal-staff-name').innerText = staffName;
-    const modal = document.getElementById('staff-modal');
-    modal.classList.add('active');
-
-    await refreshModalGallery();
-  }
-
-  function closeStaffModal() {
-    document.getElementById('staff-modal').classList.remove('active');
-    currentModalStaff = "";
-  }
-
-  async function refreshModalGallery() {
-    if (!currentModalStaff) return;
-    const gallery = document.getElementById('modal-gallery');
-    gallery.innerHTML = '<span style="color:var(--muted); font-size:12px;">Loading photos...</span>';
+  let currentEditStaff = "";
+  async function openStaffEdit(name) {
+    currentEditStaff = name;
+    openStaffCreate(); // clears form and switches page
+    
+    document.getElementById('staff-form-title').innerText = "Edit Profile";
+    document.getElementById('staff-form-sub').innerText = "Update details or add more reference photos.";
+    document.getElementById('submit-upload-btn').innerText = "Update Staff Profile";
+    document.getElementById('staff-name-input').value = name;
+    document.getElementById('staff-name-input').readOnly = false; // allow name editing
+    
+    document.getElementById('upload-status').style.color = "#6b7280";
+    document.getElementById('upload-status').innerText = "Loading staff details...";
 
     try {
-      const res = await fetch('/api/staff_profiles/' + encodeURIComponent(currentModalStaff));
+      const res = await fetch('/api/staff_profiles/'+encodeURIComponent(name));
       const data = await res.json();
+      if (data.error) { 
+        document.getElementById('upload-status').innerText = "Error loading details."; 
+        return; 
+      }
+      
+      document.getElementById('upload-status').innerText = "";
+      document.getElementById('staff-email-input').value = data.staff.email;
+      document.getElementById('staff-phone-input').value = data.staff.phone;
+      document.getElementById('staff-address-input').value = data.staff.address;
 
-      if (data.error) {
-        gallery.innerHTML = '<span style="color:var(--red); font-size:12px;">' + data.error + '</span>';
-        return;
+      // Clear and Load Communication Groups
+      document.getElementById('comm-groups-container').innerHTML = "";
+      if (data.staff.communication) {
+        try {
+          const comms = JSON.parse(data.staff.communication);
+          if (Array.isArray(comms)) {
+            comms.forEach(c => addCommGroup(c));
+          }
+        } catch(e) { console.error("Error parsing communication:", e); }
       }
 
-      gallery.innerHTML = data.photos.map(p => {
-        return `
-          <div class="gallery-item">
-            <img src="${p.url}">
-            <button class="del-btn" onclick="deleteStaffPhoto('${p.filename}')">Delete</button>
+      if (data.photos && data.photos.length > 0) {
+        document.getElementById('existing-photos-container').style.display = "block";
+        document.getElementById('existing-files-preview').innerHTML = data.photos.map(p=>`
+          <div style="position:relative; display:inline-block; width:60px; height:60px; border-radius:8px; overflow:hidden; border:1px solid #e5e7eb; margin:0 10px 10px 0; vertical-align:top;">
+            <img src="${p.url}" style="width:100%; height:100%; object-fit:cover;">
+            <button type="button" onclick="deleteStaffPhoto('${p.filename}')" style="position:absolute; bottom:0; left:0; width:100%; padding:2px; font-size:10px; background:rgba(239,68,68,0.9); color:white; border:none; cursor:pointer; font-weight:bold; letter-spacing:0.5px;">DEL</button>
           </div>
-        `;
-      }).join('');
-    } catch (err) {
-      gallery.innerHTML = '<span style="color:var(--red); font-size:12px;">Failed to load photos.</span>';
+        `).join('');
+      } else {
+        document.getElementById('existing-photos-container').style.display = "none";
+      }
+
+    } catch (e) {
+      document.getElementById('upload-status').innerText = "Error loading details.";
     }
   }
 
   async function deleteStaffPhoto(filename) {
-    if (!confirm('Are you sure you want to delete this photo?')) return;
-    try {
-      const res = await fetch('/api/staff_profiles/' + encodeURIComponent(currentModalStaff) + '/' + encodeURIComponent(filename), {
-        method: 'DELETE'
-      });
-      const data = await res.json();
-      if (data.success) {
-        await refreshModalGallery();
-        loadSavedStaff(); // refresh background list
-      } else {
-        alert("Delete failed: " + data.error);
-      }
-    } catch (err) {
-      alert("Network error.");
-    }
+    if (!confirm('Delete this photo?')) return;
+    const res = await fetch('/api/staff_profiles/'+encodeURIComponent(currentEditStaff)+'/'+encodeURIComponent(filename), {method:'DELETE'});
+    const data = await res.json();
+    if (data.success) { openStaffEdit(currentEditStaff); }
   }
 
   async function deleteStaffProfile() {
-    if (!confirm('Are you sure you want to completely delete this profile and all its photos?')) return;
-    try {
-      const res = await fetch('/api/staff_profiles/' + encodeURIComponent(currentModalStaff), {
-        method: 'DELETE'
-      });
-      const data = await res.json();
-      if (data.success) {
-        closeStaffModal();
-        loadSavedStaff();
-      } else {
-        alert("Delete failed: " + data.error);
-      }
-    } catch (err) {
-      alert("Network error.");
+    if (!confirm('Delete entire profile? This cannot be undone.')) return;
+    const res = await fetch('/api/staff_profiles/'+encodeURIComponent(currentEditStaff), {method:'DELETE'});
+    const data = await res.json();
+    if (data.success) { 
+      closeStaffCreate(); 
+      loadSavedStaff(); 
     }
   }
-
-  // Fetch initial profile data since it's the default active tab
-  document.addEventListener("DOMContentLoaded", () => {
-    loadUserProfile();
-  });
 </script>
 
 {% endblock %}

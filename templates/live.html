@@ -1,11 +1,11 @@
 {% extends 'base.html' %}
 {% set active_page = 'live' %}
 {% block content %}
-<div id="view-live" class="layout">
+<div style="background: var(--bg); padding: 20px; height: calc(100vh - 53px); box-sizing: border-box;">
+<div id="view-live" class="main-layout" style="height: 100%; border-radius: 14px; overflow: hidden; border: 1px solid var(--border); box-shadow: var(--shadow-sm);">
 
-
-  <!-- Camera List -->
-  <aside class="sidebar">
+  <!-- Left: Camera Selection List -->
+  <aside class="live-sidebar">
     <div class="sidebar-header">
       Cameras
       <button class="refresh-btn" onclick="loadCameras()">↻ Refresh</button>
@@ -13,12 +13,12 @@
     <div class="camera-list" id="camera-list">
       <div class="loading-cameras">
         <div class="spinner"></div>
-        Loading cameras...
+        Loading cameras…
       </div>
     </div>
   </aside>
 
-  <!-- Video Feed -->
+  <!-- Center: Video Stream -->
   <main class="video-area">
     <div class="stream-wrapper">
       <div class="video-placeholder" id="placeholder">
@@ -33,13 +33,27 @@
     </div>
   </main>
 
-  <!-- Stats Panel -->
-  <aside class="stats-panel">
+  <!-- Right: Analytics & Controls -->
+  <aside class="analytics-panel">
     <div class="stats-header">Live Analytics</div>
     <div class="stats-body">
 
-      <!-- Controls -->
-      <div class="section-title" style="margin-top: 5px;">Detection Controls</div>
+      <!-- Metrics -->
+      <div class="metric-row">
+        <span class="metric-label">Persons</span>
+        <span class="metric-val green" id="stat-persons">0</span>
+      </div>
+      <div class="metric-row">
+        <span class="metric-label">Motion</span>
+        <span class="metric-val" id="stat-motion" style="font-size:14px;">–</span>
+      </div>
+      <div class="metric-row">
+        <span class="metric-label">FPS</span>
+        <span class="metric-val accent" id="stat-fps">–</span>
+      </div>
+
+      <!-- Detection Controls -->
+      <div class="section-title">Detection Controls</div>
       <div class="toggle-row">
         <span class="toggle-label">Person Detect</span>
         <label class="switch">
@@ -63,36 +77,21 @@
       </div>
 
       <button class="notify-btn" onclick="sendManualAlert()">
-        <span>📢</span> Send Message
+        <span>📢</span> Send Manual Alert
       </button>
 
-      <div class="section-title">Metrics</div>
-      <!-- Metric chips -->
-      <div class="metric-row">
-        <span class="metric-label">Persons</span>
-        <span class="metric-val green" id="stat-persons">0</span>
-      </div>
-      <div class="metric-row">
-        <span class="metric-label">Motion</span>
-        <span class="metric-val" id="stat-motion" style="font-size:14px;">–</span>
-      </div>
-      <div class="metric-row">
-        <span class="metric-label">FPS</span>
-        <span class="metric-val accent" id="stat-fps">–</span>
-      </div>
-
+      <!-- Detected People -->
       <div class="section-title">Detected Persons</div>
       <div id="person-cards">
         <div class="no-persons">
-          <div class="no-icon">🧍</div>No persons detected
+          <div class="no-icon">🧍</div>No detection active
         </div>
       </div>
 
     </div>
     <button class="stop-btn" id="stop-btn" onclick="stopCamera()" disabled>⏹ Stop Camera</button>
   </aside>
+
 </div>
-
-<!-- ─── Dashboard View ─── -->
-
+</div>
 {% endblock %}

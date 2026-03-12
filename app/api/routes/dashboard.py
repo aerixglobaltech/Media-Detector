@@ -30,7 +30,43 @@ def route_live():
     return render_template("live.html")
 
 
+@dashboard_bp.route("/attendance")
+@login_required
+def route_attendance():
+    return render_template("attendance.html")
+
+
+@dashboard_bp.route("/reports")
+@login_required
+def route_reports():
+    return render_template("reports.html")
+
+
 @dashboard_bp.route("/settings")
 @login_required
 def route_settings():
-    return render_template("settings.html")
+    return render_template("settings/index.html")
+
+
+@dashboard_bp.route("/settings/profile")
+@login_required
+def route_settings_profile():
+    return render_template("settings/profile.html")
+
+
+@dashboard_bp.route("/settings/staff")
+@login_required
+def route_settings_staff():
+    return render_template("settings/staff.html")
+
+
+@dashboard_bp.route("/settings/cameras")
+@login_required
+def route_settings_cameras():
+    return render_template("settings/cameras.html")
+
+
+@dashboard_bp.route("/settings/integrations")
+@login_required
+def route_settings_integrations():
+    return render_template("settings/integrations.html")

@@ -1,0 +1,323 @@
+{% extends "base.html" %}
+{% set active_page = 'settings' %}
+
+{% block content %}
+<div id="view-settings-staff" style="height: calc(100vh - 53px); overflow-y: auto; background: var(--bg); padding: 28px;">
+<div style="background: var(--surface); border-radius: 14px; border: 1px solid var(--border); box-shadow: var(--shadow-sm); padding: 32px 40px; min-height: calc(100vh - 53px - 56px);">
+
+  <!-- Staff Directory List -->
+  <div id="mod-upload" class="s-mod-page active">
+    <a href="/settings" class="s-back">‹ Back to Settings</a>
+    <div style="display:flex; justify-content:space-between; align-items:center;">
+      <div>
+        <h2 class="s-mod-title">Staff Directory</h2>
+        <p class="s-mod-sub">Manage staff recognition profiles</p>
+      </div>
+      <button class="upload-btn" onclick="openStaffCreate()" style="margin:0; background: var(--accent); color:white; border:none; padding:10px 20px; border-radius:8px; cursor:pointer; font-weight:600;">+ Create Staff</button>
+    </div>
+    
+    <hr style="border:0; border-top:1px solid var(--border); margin:24px 0;">
+    <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:16px;">
+      <h3 style="font-size:16px; font-weight:700; color: var(--text);">Saved Staff Profiles</h3>
+      <div style="position:relative; width:300px;">
+        <span style="position:absolute; left:12px; top:50%; transform:translateY(-50%); font-size:14px; color: var(--muted);">🔍</span>
+        <input type="text" id="staff-search-input" placeholder="Search by name or phone..." 
+               style="width:100%; padding:8px 12px 8px 36px; font-size:13px; border:1px solid var(--border); border-radius:8px; background: var(--bg); color: var(--text);"
+               onkeyup="filterStaff()">
+      </div>
+    </div>
+    <div id="saved-staff-gallery" class="staff-gallery"></div>
+  </div>
+
+  <!-- Staff Create/Edit Form (Initially hidden) -->
+  <div id="mod-staff-create" class="s-mod-page">
+    <button class="s-back" onclick="closeStaffCreate()">‹ Back to Directory</button>
+    <div style="display:flex; justify-content:space-between; align-items:center;">
+      <div>
+        <h2 class="s-mod-title" id="staff-form-title">Create New Staff</h2>
+        <p class="s-mod-sub" id="staff-form-sub">Enter staff details and upload reference photos.</p>
+      </div>
+    </div>
+    
+    <div style="margin-top:28px; display:grid; grid-template-columns:1fr 1fr; gap:30px;">
+      <div style="background: var(--surface2); padding:24px; border-radius:12px; border:1px solid var(--border);">
+        <h4 style="margin-bottom:16px; font-size:15px; color: var(--text);">Staff Details</h4>
+        <div class="s-field"><label>Full Name *</label><input type="text" id="staff-name-input" placeholder="e.g. John Doe" /></div>
+        <div class="s-field"><label>Email Address</label><input type="email" id="staff-email-input" placeholder="john@example.com" /></div>
+        <div class="s-field"><label>Phone Number</label><input type="text" id="staff-phone-input" placeholder="+1 234 567 890" /></div>
+        <div class="s-field"><label>Address / Department</label><input type="text" id="staff-address-input" placeholder="Engineering Dept..." /></div>
+
+        <div style="margin-top:24px; border-top:1px solid var(--border); padding-top:20px;">
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+            <h4 style="font-size:14px; margin:0; color: var(--text);">Communication Details</h4>
+            <button type="button" onclick="addCommGroup()" style="background: var(--bg); border:1px solid var(--border); border-radius:6px; padding:4px 10px; font-size:11px; font-weight:700; cursor:pointer; color: var(--text);">+ Add New</button>
+          </div>
+          <div id="comm-groups-container"></div>
+        </div>
+      </div>
+      <div>
+        <div class="s-field">
+          <label>Select Reference Photos *</label>
+          <div style="border:2px dashed var(--border); border-radius:12px; padding:30px; text-align:center; position:relative; background: var(--bg); transition:all 0.2s;" ondragover="this.style.borderColor='var(--accent)';event.preventDefault()" ondragleave="this.style.borderColor='var(--border)'" ondrop="this.style.borderColor='var(--border)';event.preventDefault();handleFileSelect({target:{files:event.dataTransfer.files}})">
+            <input type="file" id="staff-photos-input" multiple accept="image/*" style="position:absolute; inset:0; opacity:0; cursor:pointer;" onchange="handleFileSelect(event)">
+            <div style="font-size:32px; margin-bottom:10px;">📸</div>
+            <div style="font-size:14px; font-weight:700; color: var(--text);">Click to select photos</div>
+            <div style="font-size:11px; color: var(--muted); margin-top:4px;">JPG, PNG — 5 to 10 images recommended</div>
+          </div>
+        </div>
+        <div id="selected-files-preview" style="margin-top:16px;"></div>
+        
+        <div id="existing-photos-container" style="display:none; margin-top:24px; border-top:1px solid var(--border); padding-top:20px;">
+          <label style="display:block; font-size:13px; font-weight:600; color: var(--text); margin-bottom:10px;">Previously Uploaded Photos</label>
+          <div id="existing-files-preview"></div>
+        </div>
+
+        <div style="margin-top:32px;">
+          <button id="submit-upload-btn" class="upload-btn" onclick="uploadStaffPhotos()" style="width:100%; padding:14px; background: var(--accent); color:white; font-size:14px; font-weight:700; border:none; border-radius:10px;">Create Staff Profile</button>
+          <div id="upload-status" style="margin-top:12px; font-size:12px; text-align:center; font-weight:600;"></div>
+          <button id="delete-profile-btn" onclick="deleteStaffProfile()" style="display:none; width:100%; margin-top:12px; padding:10px; background:none; border:1px solid var(--error-bg); color: var(--red); font-size:12px; border-radius:8px; cursor:pointer;">Delete Entire Profile</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div>
+</div>
+
+<style>
+.s-back { display:inline-block; background:none; border: 1px solid var(--border); padding: 8px 16px; border-radius: 8px; font-size: 13px; font-weight: 600; color: var(--muted); cursor: pointer; margin-bottom: 24px; transition: all 0.2s; text-decoration:none; }
+.s-back:hover { border-color: var(--accent); color: var(--accent); }
+.s-mod-title { font-size: 22px; font-weight: 800; color: var(--text); margin:0 0 6px 0; }
+.s-mod-sub { font-size: 13px; color: var(--muted); margin:0; }
+.s-mod-page { display: none; }
+.s-mod-page.active { display: block; }
+.s-field { margin-bottom: 18px; }
+.s-field label { display: block; font-size: 13px; font-weight: 600; color: var(--text); margin-bottom: 6px; }
+.s-field input { width: 100%; padding: 10px 14px; border: 1px solid var(--border); border-radius: 8px; font-size: 14px; color: var(--text); background: var(--bg); outline: none; transition: border-color 0.2s; }
+.s-field input:focus { border-color: var(--accent); }
+
+.staff-gallery { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 16px; margin-top: 20px; }
+.card-menu-btn { position: absolute; top: 10px; right: 10px; background: var(--surface2); border: 1px solid var(--border); width: 28px; height: 28px; display: flex; align-items: center; justify-content: center; border-radius: 6px; color: var(--muted); cursor: pointer; z-index: 10; transition: all 0.2s; }
+.card-menu-btn:hover { background: var(--border); color: var(--text); }
+.card-dropdown { position: absolute; top: 42px; right: 10px; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; box-shadow: var(--shadow-md); z-index: 100; display: none; min-width: 160px; overflow: hidden; text-align: left; }
+.card-dropdown.active { display: block !important; }
+.card-dropdown-item { padding: 10px 14px; font-size: 13px; color: var(--text); cursor: pointer; display: flex !important; align-items: center; gap: 10px; border-bottom: 1px solid var(--border); background: var(--surface); transition: var(--transition); }
+.card-dropdown-item:last-child { border-bottom: none; }
+.card-dropdown-item:hover { background: var(--surface2); color: var(--accent); }
+</style>
+
+<script>
+  document.addEventListener('DOMContentLoaded', loadSavedStaff);
+
+  let selectedFiles = [];
+  let currentEditStaff = "";
+  let allStaff = [];
+
+  function handleFileSelect(event) {
+    selectedFiles = Array.from(event.target.files);
+    const preview = document.getElementById('selected-files-preview');
+    preview.innerHTML = '';
+    selectedFiles.forEach(file => {
+      const reader = new FileReader();
+      reader.onload = e => {
+        const d = document.createElement('div');
+        d.style = "position:relative; display:inline-block; width:60px; height:60px; border-radius:8px; overflow:hidden; border:1px solid #e5e7eb; margin:0 10px 10px 0; vertical-align:top;";
+        d.innerHTML = `<img src="${e.target.result}" style="width:100%;height:100%;object-fit:cover;">`;
+        preview.appendChild(d);
+      };
+      reader.readAsDataURL(file);
+    });
+  }
+
+  async function uploadStaffPhotos() {
+    const nameInput = document.getElementById('staff-name-input').value.trim();
+    const emailInput = document.getElementById('staff-email-input').value.trim();
+    const phoneInput = document.getElementById('staff-phone-input').value.trim();
+    const addressInput = document.getElementById('staff-address-input').value.trim();
+    
+    // Collect Communication Data
+    const commData = [];
+    document.querySelectorAll('.comm-group').forEach(group => {
+      const gName = group.querySelector('.comm-name').value.trim();
+      const gPhone = group.querySelector('.comm-phone').value.trim();
+      if(gName || gPhone) commData.push({name: gName, phone: gPhone});
+    });
+
+    const statusEl = document.getElementById('upload-status');
+    const isEditMode = currentEditStaff !== "";
+    const originalName = isEditMode ? currentEditStaff : "";
+
+    if (!nameInput) { statusEl.style.color="#ef4444"; statusEl.innerText="❌ Please provide a staff name."; return; }
+    if (!isEditMode && !selectedFiles.length) { statusEl.style.color="#ef4444"; statusEl.innerText="❌ Please select at least 1 photo."; return; }
+    statusEl.style.color="#2563eb"; statusEl.innerText= isEditMode ? "⏳ Updating profile..." : "⏳ Creating profile...";
+    document.getElementById('submit-upload-btn').disabled=true;
+    
+    const fd = new FormData();
+    fd.append('staff_name', nameInput);
+    if (isEditMode) {
+      fd.append('is_update', 'true');
+      fd.append('original_name', originalName);
+    }
+    fd.append('email', emailInput);
+    fd.append('phone', phoneInput);
+    fd.append('address', addressInput);
+    fd.append('communication', JSON.stringify(commData));
+    selectedFiles.forEach(f => fd.append('photos', f));
+    
+    try {
+      const res = await fetch('/api/upload_staff', {method:'POST', body:fd});
+      const data = await res.json();
+      if (data.success) {
+        statusEl.style.color="#10b981"; statusEl.innerText="✅ Profile Saved successfully.";
+        setTimeout(() => { closeStaffCreate(); loadSavedStaff(); }, 1500);
+      } else { statusEl.style.color="#ef4444"; statusEl.innerText="❌ "+data.error; }
+    } catch (e) { statusEl.style.color="#ef4444"; statusEl.innerText="❌ Network error."; }
+    document.getElementById('submit-upload-btn').disabled=false;
+  }
+
+  function openStaffCreate() {
+    currentEditStaff = "";
+    document.getElementById('staff-form-title').innerText = "Create New Staff";
+    document.getElementById('submit-upload-btn').innerText = "Create Staff Profile";
+    document.getElementById('delete-profile-btn').style.display = "none";
+    document.getElementById('staff-name-input').value = "";
+    document.getElementById('staff-email-input').value = "";
+    document.getElementById('staff-phone-input').value = "";
+    document.getElementById('staff-address-input').value = "";
+    document.getElementById('comm-groups-container').innerHTML = "";
+    document.getElementById('existing-photos-container').style.display = "none";
+    document.getElementById('selected-files-preview').innerHTML = '';
+    document.getElementById('upload-status').innerText = "";
+    document.getElementById('mod-upload').classList.remove('active');
+    document.getElementById('mod-staff-create').classList.add('active');
+  }
+  
+  function closeStaffCreate() {
+    document.getElementById('mod-staff-create').classList.remove('active');
+    document.getElementById('mod-upload').classList.add('active');
+  }
+
+  function addCommGroup(initialData = null) {
+    const container = document.getElementById('comm-groups-container');
+    const div = document.createElement('div');
+    div.className = 'comm-group';
+    div.style = "display:grid; grid-template-columns:1fr 1fr 34px; gap:10px; margin-bottom:10px; align-items:flex-end;";
+    div.innerHTML = `
+      <div class="s-field" style="margin:0;">
+        <label style="font-size:11px;">Name</label>
+        <input type="text" class="comm-name" placeholder="Contact Person" value="${initialData?.name || ''}" style="padding:6px 10px; font-size:12px;">
+      </div>
+      <div class="s-field" style="margin:0;">
+        <label style="font-size:11px;">Phone</label>
+        <input type="text" class="comm-phone" placeholder="Phone No" value="${initialData?.phone || ''}" style="padding:6px 10px; font-size:12px;">
+      </div>
+      <button type="button" onclick="this.parentElement.remove()" style="background:#fee2e2; border:1px solid #fecaca; color:#ef4444; border-radius:6px; height:31px; font-size:14px; cursor:pointer;">✕</button>
+    `;
+    container.appendChild(div);
+  }
+
+  async function loadSavedStaff() {
+    const gallery = document.getElementById('saved-staff-gallery');
+    gallery.innerHTML = '<span style="color:#6b7280;font-size:12px;">Loading...</span>';
+    try {
+      const res = await fetch('/api/staff_profiles');
+      const data = await res.json();
+      allStaff = data.profiles || [];
+      renderStaffCards(allStaff);
+    } catch (e) { gallery.innerHTML='<span style="color:#ef4444;">Failed to load.</span>'; }
+  }
+
+  function renderStaffCards(profiles) {
+    const gallery = document.getElementById('saved-staff-gallery');
+    if (!profiles.length) { gallery.innerHTML='<span style="color:#6b7280;">No matches found.</span>'; return; }
+    gallery.innerHTML = profiles.map(p=>`
+      <div style="background: var(--bg); border:1px solid var(--border); border-radius:10px; padding:18px 14px; text-align:center; position:relative;" id="card-${p.name}">
+        <button class="card-menu-btn" onclick="toggleCardDropdown(event, '${p.name}')">⋮</button>
+        <div class="card-dropdown" id="dropdown-${p.name}">
+          <div class="card-dropdown-item" onclick="openStaffEdit('${p.name}')"><span>👁️</span> View Profile</div>
+          <div class="card-dropdown-item" onclick="toggleStaffStatus('${p.name}')">
+            <span>${p.status==='active'?'🚫':'✅'}</span> ${p.status==='active'?'Deactivate':'Activate'} Profile
+          </div>
+        </div>
+        <div style="width:72px; height:72px; margin:0 auto 10px; border-radius:50%; overflow:hidden; border:2px solid ${p.status==='active'?'var(--accent)':'var(--muted)'}; opacity:${p.status==='active'?'1':'0.5'};">
+          <img src="${p.thumbnail || '/static/img/default-avatar.png'}" style="width:100%; height:100%; object-fit:cover;">
+        </div>
+        <div style="font-size:14px; font-weight:600; color: var(--text); text-overflow:ellipsis; overflow:hidden; white-space:nowrap;">${p.name}</div>
+        <div style="font-size:11px; color: var(--muted); margin-top:2px;">${p.phone || (p.email || p.photo_count+' Photos')}</div>
+        <div style="margin-top:8px;">
+          <span style="font-size:9px; font-weight:700; text-transform:uppercase; padding:2px 8px; border-radius:10px; background:${p.status==='active'?'var(--success-bg)':'var(--surface2)'}; color:${p.status==='active'?'var(--green)':'var(--muted)'};">
+            ${p.status}
+          </span>
+        </div>
+      </div>`).join('');
+  }
+
+  function filterStaff() {
+    const q = document.getElementById('staff-search-input').value.toLowerCase();
+    const filtered = allStaff.filter(p => p.name.toLowerCase().includes(q) || (p.phone && p.phone.includes(q)));
+    renderStaffCards(filtered);
+  }
+
+  function toggleCardDropdown(e, name) {
+    e.stopPropagation();
+    document.querySelectorAll('.card-dropdown').forEach(d => { if(d.id !== 'dropdown-'+name) d.classList.remove('active'); });
+    document.getElementById('dropdown-'+name).classList.toggle('active');
+  }
+
+  window.addEventListener('click', () => { document.querySelectorAll('.card-dropdown').forEach(d => d.classList.remove('active')); });
+
+  async function toggleStaffStatus(name) {
+    try {
+      const res = await fetch('/api/staff_profiles/'+encodeURIComponent(name)+'/toggle', {method:'POST'});
+      const data = await res.json();
+      if (data.success) {
+        const staff = allStaff.find(s => s.name === name);
+        if(staff) staff.status = data.new_status;
+        renderStaffCards(allStaff);
+      }
+    } catch(e) {}
+  }
+
+  async function openStaffEdit(name) {
+    currentEditStaff = name;
+    openStaffCreate();
+    document.getElementById('staff-form-title').innerText = "Edit Profile";
+    document.getElementById('submit-upload-btn').innerText = "Update Staff Profile";
+    document.getElementById('delete-profile-btn').style.display = "block";
+    document.getElementById('staff-name-input').value = name;
+    document.getElementById('upload-status').innerText = "Loading details...";
+    try {
+      const res = await fetch('/api/staff_profiles/'+encodeURIComponent(name));
+      const data = await res.json();
+      document.getElementById('upload-status').innerText = "";
+      document.getElementById('staff-email-input').value = data.staff.email;
+      document.getElementById('staff-phone-input').value = data.staff.phone;
+      document.getElementById('staff-address-input').value = data.staff.address;
+      if (data.staff.communication) {
+        const comms = JSON.parse(data.staff.communication);
+        if (Array.isArray(comms)) comms.forEach(c => addCommGroup(c));
+      }
+      if (data.photos && data.photos.length > 0) {
+        document.getElementById('existing-photos-container').style.display = "block";
+        document.getElementById('existing-files-preview').innerHTML = data.photos.map(p=>`
+          <div style="position:relative; display:inline-block; width:60px; height:60px; border-radius:8px; overflow:hidden; border:1px solid #e5e7eb; margin:0 10px 10px 0;">
+            <img src="${p.url}" style="width:100%; height:100%; object-fit:cover;">
+            <button type="button" onclick="deleteStaffPhoto('${p.filename}')" style="position:absolute; bottom:0; left:0; width:100%; background:rgba(239,68,68,0.9); color:white; border:none; font-size:10px; cursor:pointer;">DEL</button>
+          </div>`).join('');
+      }
+    } catch (e) {}
+  }
+
+  async function deleteStaffPhoto(filename) {
+    if (!confirm('Delete this photo?')) return;
+    const res = await fetch('/api/staff_profiles/'+encodeURIComponent(currentEditStaff)+'/'+encodeURIComponent(filename), {method:'DELETE'});
+    if ((await res.json()).success) openStaffEdit(currentEditStaff);
+  }
+
+  async function deleteStaffProfile() {
+    if (!confirm('Delete entire profile?')) return;
+    const res = await fetch('/api/staff_profiles/'+encodeURIComponent(currentEditStaff), {method:'DELETE'});
+    if ((await res.json()).success) { closeStaffCreate(); loadSavedStaff(); }
+  }
+</script>
+{% endblock %}

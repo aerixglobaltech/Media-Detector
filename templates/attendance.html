@@ -1,0 +1,24 @@
+{% extends "base.html" %}
+{% set active_page = 'attendance' %}
+
+{% block content %}
+<div style="height: calc(100vh - 53px); overflow-y: auto; background: var(--bg); padding: 28px;">
+<div style="background: var(--surface); border-radius: 14px; border: 1px solid var(--border); box-shadow: var(--shadow-sm); padding: 32px 40px; min-height: calc(100vh - 53px - 56px);">
+
+  <div style="margin-bottom: 24px;">
+    <div style="display:flex; align-items:center; gap:12px; margin-bottom:6px;">
+      <span style="font-size:24px;">📅</span>
+      <h1 style="font-size:22px; font-weight:800; color: var(--text); margin:0;">Attendance</h1>
+    </div>
+    <p style="font-size:13px; color: var(--muted); margin:0;">Track and monitor staff attendance records</p>
+  </div>
+
+  <div style="border: 1px dashed var(--border); border-radius: 12px; padding: 60px; text-align: center; color: var(--muted);">
+    <div style="font-size: 48px; margin-bottom: 16px;">⏳</div>
+    <h3 style="color: var(--text); font-size: 18px; font-weight: 700;">Under Development</h3>
+    <p style="font-size: 14px; margin-top: 8px;">The Attendance module is being prepared and will be available soon.</p>
+  </div>
+
+</div>
+</div>
+{% endblock %}

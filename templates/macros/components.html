@@ -1,0 +1,55 @@
+<!-- Reusable UI Components for Mission Control -->
+
+{% macro logo(size='small') %}
+<div class="topbar-logo {{ 'small' if size == 'small' else 'large' }}">
+    <div class="icon">
+        <svg fill="none" stroke="white" stroke-width="{{ '2.5' if size == 'large' else '2' }}" viewBox="0 0 24 24" width="{{ '28' if size == 'large' else '22' }}" height="{{ '28' if size == 'large' else '22' }}">
+            <path d="M2 12h3M19 12h3M12 2v3M12 19v3"></path>
+            <circle cx="12" cy="12" r="7"></circle>
+            <circle cx="12" cy="12" r="3"></circle>
+        </svg>
+    </div>
+    <div class="logo-text">MISSION<br>CONTROL</div>
+</div>
+{% endmacro %}
+
+{% macro badge(text, type='online') %}
+<div class="badge {{ 'offline' if type == 'offline' else '' }}">
+    <div class="pulse {{ 'off' if type == 'offline' else 'on' }}"></div>
+    {{ text }}
+</div>
+{% endmacro %}
+
+{% macro stat_card(label, value, id, type='online') %}
+<div class="stat-card {{ type }}">
+    <div class="value" id="{{ id }}">{{ value }}</div>
+    <div class="label">{{ label }}</div>
+</div>
+{% endmacro %}
+
+{% macro nav_tab(label, icon_html, active=false, url='#', style='', class='') %}
+<a href="{{ url }}" class="nav-tab {{ 'active' if active else '' }} {{ class }}" style="{{ style }}">
+    <span class="nav-icon">{{ icon_html|safe }}</span> 
+    <span class="nav-label">{{ label }}</span>
+</a>
+{% endmacro %}
+
+{% macro button(text, type='primary', submit=true, class='') %}
+<button type="{{ 'submit' if submit else 'button' }}" class="btn btn-{{ type }} {{ class }}">
+    {{ text }}
+</button>
+{% endmacro %}
+
+{% macro form_group(label, name, type='text', placeholder='', required=true, id='') %}
+<div class="form-group">
+    <label>{{ label }}</label>
+    {% if type == 'password' %}
+    <div class="password-container">
+        <input type="password" name="{{ name }}" id="{{ id or 'password' }}" {{ 'required' if required else '' }} placeholder="{{ placeholder }}">
+        <button type="button" class="password-toggle" onclick="togglePassword('{{ id or 'password' }}')">Show</button>
+    </div>
+    {% else %}
+    <input type="{{ type }}" name="{{ name }}" {{ 'required' if required else '' }} placeholder="{{ placeholder }}">
+    {% endif %}
+</div>
+{% endmacro %}
