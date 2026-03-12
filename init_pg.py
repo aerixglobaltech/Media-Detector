@@ -55,7 +55,8 @@ if url and "postgres" in url:
         """)
         
         conn.commit()
-        print("SUCCESS: All tables created in mediadetect database.")
+        db_name = url.split('/')[-1].split('?')[0]
+        print(f"SUCCESS: All tables created in {db_name} database.")
         conn.close()
     except Exception as e:
         print(f"FAILED: {e}")

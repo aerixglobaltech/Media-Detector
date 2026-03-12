@@ -11,7 +11,7 @@ pip install psycopg2-binary
 ## 2. Environment Configuration (`.env`)
 Unga `.env` file-la intha line-ah update pannunga. PostgreSQL password-ah correct-ah kudukkavum.
 ```env
-DATABASE_URL=postgres://postgres:YOUR_PASSWORD@localhost:5432/mediadetect
+DATABASE_URL=postgres://postgres:YOUR_PASSWORD@localhost:5432/YOUR_DB_NAME
 ```
 
 ## 3. Database Initialization

@@ -118,8 +118,11 @@ pip install psycopg2-binary
 
 # ---- PostgreSQL Setup ----
 Write-Host "`n--- Database Configuration ---" -ForegroundColor Yellow
-$DB_NAME = Read-Host "Enter Database Name [default: mediadetect]"
-if ([string]::IsNullOrWhiteSpace($DB_NAME)) { $DB_NAME = "mediadetect" }
+$DB_NAME = Read-Host "Enter Database Name (required)"
+if ([string]::IsNullOrWhiteSpace($DB_NAME)) { 
+    Write-Error "Database name is required."
+    exit 1
+}
 
 $DB_USER = Read-Host "Enter PostgreSQL Username [default: postgres]"
 if ([string]::IsNullOrWhiteSpace($DB_USER)) { $DB_USER = "postgres" }
