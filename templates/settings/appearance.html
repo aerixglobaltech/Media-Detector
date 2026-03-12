@@ -1,0 +1,277 @@
+{% extends "base.html" %}
+{% set active_page = 'settings' %}
+{% set sub_page = 'appearance' %}
+
+{% block content %}
+<div id="view-appearance" style="height: calc(100vh - 53px); overflow-y: auto; background: var(--bg); padding: 28px;">
+<div style="background: var(--surface); border-radius: 14px; border: 1px solid var(--border); box-shadow: var(--shadow-sm); padding: 32px 40px; min-height: calc(100vh - 53px - 56px);">
+  
+  <!-- Back link -->
+  <a href="/settings" style="text-decoration: none; color: var(--muted); display: flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 600; margin-bottom: 24px;">
+    <span>←</span> Back to Settings
+  </a>
+
+  <!-- Header -->
+  <div style="margin-bottom: 32px;">
+    <div style="display:flex; align-items:center; gap:12px; margin-bottom:6px;">
+      <span style="font-size:24px;">🎨</span>
+      <h1 style="font-size:22px; font-weight:800; color: var(--text); margin:0;">Appearance Settings</h1>
+    </div>
+    <p style="font-size:13px; color: var(--muted); margin:0;">Customize the look and feel of your application</p>
+  </div>
+
+  <div style="display: grid; grid-template-columns: 1fr; gap: 32px; max-width: 900px;">
+    
+    <!-- ── Theme Mode ── -->
+    <div class="setting-block">
+      <div class="sb-header">
+        <div class="sb-title">Theme Mode</div>
+        <div class="sb-desc">Choose your preferred color theme</div>
+      </div>
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px;">
+        <div id="theme-light" class="theme-option" onclick="handleThemeSet('light')">
+          <span style="font-size: 24px; margin-bottom: 12px;">☀️</span>
+          <span style="font-weight: 600;">Light</span>
+        </div>
+        <div id="theme-dark" class="theme-option" onclick="handleThemeSet('dark')">
+          <span style="font-size: 24px; margin-bottom: 12px;">🌙</span>
+          <span style="font-weight: 600;">Dark</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── Navigation ── -->
+    <div class="setting-block">
+      <div class="sb-header">
+        <div class="sb-title">Navigation Preferences</div>
+        <div class="sb-desc">Configure how you navigate the system</div>
+      </div>
+      <div style="display: flex; justify-content: space-between; align-items: center; padding: 16px; background: var(--surface2); border-radius: 10px; border: 1px solid var(--border);">
+        <div>
+          <div style="font-weight: 700; font-size: 14px; color: var(--text);">Show Breadcrumbs</div>
+          <div style="font-size: 12px; color: var(--muted); margin-top: 2px;">Display navigation breadcrumbs at the top of pages</div>
+        </div>
+        <label class="switch">
+          <input type="checkbox" id="check-breadcrumbs" onchange="saveAppSetting('show_breadcrumbs', this.checked ? 'true' : 'false')">
+          <span class="slider round"></span>
+        </label>
+      </div>
+    </div>
+
+    <!-- ── Branding ── -->
+    <div class="setting-block">
+      <div class="sb-header">
+        <div class="sb-title">Branding</div>
+        <div class="sb-desc">Manage logo, company name and favicon</div>
+      </div>
+      
+      <div style="display: grid; grid-template-columns: 1fr; gap: 20px;">
+        <div class="input-group">
+          <label>Company Name</label>
+          <div style="display: flex; gap: 8px;">
+            <input type="text" id="set-company-name" placeholder="Enter company name" class="s-input">
+            <button class="btn accent" onclick="saveAppSetting('company_name', document.getElementById('set-company-name').value)">Save</button>
+          </div>
+        </div>
+        
+        <div class="input-group">
+          <label>Logo URL</label>
+          <div style="display: flex; gap: 8px;">
+            <input type="text" id="set-logo-url" placeholder="https://example.com/logo.png" class="s-input">
+            <input type="file" id="file-logo" style="display: none;" accept="image/*" onchange="uploadAsset('logo', this)">
+            <button class="btn" title="Upload Logo" style="background: var(--surface2); color: var(--text); padding: 10px; display: flex; align-items: center; justify-content: center;" onclick="document.getElementById('file-logo').click()">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+            </button>
+            <button class="btn accent" onclick="saveAppSetting('logo_url', document.getElementById('set-logo-url').value)">Save</button>
+          </div>
+          <div id="preview-logo-box" style="margin-top: 12px; display: none;">
+            <div style="font-size: 11px; color: var(--muted); margin-bottom: 6px; font-weight: 700; text-transform: uppercase;">Preview:</div>
+            <img id="img-preview-logo" src="" alt="Logo Preview" style="max-height: 60px; border-radius: 8px; border: 1px solid var(--border); background: var(--surface2); padding: 8px; object-fit: contain;">
+          </div>
+        </div>
+
+        <div class="input-group">
+          <label>Favicon URL</label>
+          <div style="display: flex; gap: 8px;">
+            <input type="text" id="set-favicon-url" placeholder="https://example.com/favicon.ico" class="s-input" onchange="updatePreview('favicon', this.value)">
+            <input type="file" id="file-favicon" style="display: none;" onchange="uploadAsset('favicon', this)">
+            <button class="btn" title="Upload Favicon" style="background: var(--surface2); color: var(--text); padding: 10px; display: flex; align-items: center; justify-content: center;" onclick="document.getElementById('file-favicon').click()">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+            </button>
+            <button class="btn accent" onclick="saveAppSetting('favicon_url', document.getElementById('set-favicon-url').value)">Save</button>
+          </div>
+          <div id="preview-favicon-box" style="margin-top: 12px; display: none;">
+            <div style="font-size: 11px; color: var(--muted); margin-bottom: 6px; font-weight: 700; text-transform: uppercase;">Preview:</div>
+            <img id="img-preview-favicon" src="" alt="Favicon Preview" style="width: 32px; height: 32px; border-radius: 4px; border: 1px solid var(--border); background: var(--surface2); padding: 4px; object-fit: contain;">
+          </div>
+        </div>
+      </div>
+      
+      <div style="margin-top: 32px; display: flex; justify-content: flex-end; gap: 12px; border-top: 1px solid var(--border); padding-top: 24px;">
+        <button class="btn" style="background: var(--surface2); color: var(--text);" onclick="window.location.reload()">Cancel</button>
+        <button class="btn accent" onclick="saveAllBranding()">Save Appearance Settings</button>
+      </div>
+    </div>
+
+  </div>
+
+</div>
+</div>
+
+<style>
+.setting-block { margin-bottom: 24px; padding: 24px; background: var(--bg); border: 1px solid var(--border); border-radius: 12px; }
+.sb-header { margin-bottom: 20px; }
+.sb-title { font-size: 15px; font-weight: 700; color: var(--text); }
+.sb-desc { font-size: 13px; color: var(--muted); margin-top: 4px; }
+
+.theme-option { 
+    display: flex; flex-direction: column; align-items: center; justify-content: center; 
+    padding: 30px; background: var(--surface); border: 2px solid var(--border); 
+    border-radius: 12px; cursor: pointer; transition: all 0.2s; 
+}
+.theme-option:hover { border-color: var(--accent); transform: scale(1.02); }
+.theme-option.active { border-color: var(--accent); background: var(--accent-bg); }
+
+.input-group { display: flex; flex-direction: column; gap: 8px; }
+.input-group label { font-size: 13px; font-weight: 600; color: var(--text); }
+.s-input { 
+    background: var(--surface2); border: 1px solid var(--border); 
+    color: var(--text); padding: 11px 16px; border-radius: 8px; font-size: 14px; width: 100%;
+    outline: none; transition: border-color 0.2s;
+}
+.s-input:focus { border-color: var(--accent); }
+
+.btn { 
+    padding: 10px 20px; border-radius: 8px; font-weight: 700; font-size: 13px; 
+    cursor: pointer; border: none; transition: all 0.2s;
+}
+.btn.accent { background: var(--accent); color: white; }
+.btn.accent:hover { opacity: 0.9; }
+
+/* Switch Toggle */
+.switch { position: relative; display: inline-block; width: 44px; height: 22px; }
+.switch input { opacity: 0; width: 0; height: 0; }
+.slider { position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background-color: #ccc; transition: .4s; }
+.slider:before { position: absolute; content: ""; height: 16px; width: 16px; left: 3px; bottom: 3px; background-color: white; transition: .4s; }
+input:checked + .slider { background-color: var(--accent); }
+input:checked + .slider:before { transform: translateX(22px); }
+.slider.round { border-radius: 34px; }
+.slider.round:before { border-radius: 50%; }
+</style>
+
+<script>
+async function loadAppSettings() {
+  try {
+    const res = await fetch('/api/system_settings');
+    const data = await res.json();
+    
+    document.getElementById('set-company-name').value = data.company_name || '';
+    document.getElementById('set-logo-url').value = data.logo_url || '';
+    document.getElementById('set-favicon-url').value = data.favicon_url || '';
+    
+    updatePreview('logo', data.logo_url);
+    updatePreview('favicon', data.favicon_url);
+    
+    document.getElementById('check-breadcrumbs').checked = (data.show_breadcrumbs === 'true');
+    
+    updateThemeUI(data.theme_mode || 'light');
+  } catch (e) {
+    console.error("Failed to load settings:", e);
+  }
+}
+
+function updateThemeUI(theme) {
+  document.querySelectorAll('.theme-option').forEach(el => el.classList.remove('active'));
+  const activeOption = document.getElementById('theme-' + theme);
+  if (activeOption) activeOption.classList.add('active');
+}
+
+async function handleThemeSet(theme) {
+  updateThemeUI(theme);
+  setTheme(theme); // Global theme swap
+  await saveAppSetting('theme_mode', theme);
+}
+
+function updatePreview(type, url) {
+  const box = document.getElementById(`preview-${type}-box`);
+  const img = document.getElementById(`img-preview-${type}`);
+  if (url && url.length > 5) {
+    img.src = url;
+    box.style.display = 'block';
+  } else {
+    box.style.display = 'none';
+  }
+}
+
+async function saveAppSetting(key, value) {
+  try {
+    const res = await fetch('/api/system_settings', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ [key]: value })
+    });
+    const result = await res.json();
+    if (result.success) {
+      console.log(`Saved ${key}=${value}`);
+      // If branding settings were changed, we might want to refresh the page to see changes in sidebar
+      if (['company_name', 'logo_url', 'favicon_url', 'show_breadcrumbs'].includes(key)) {
+        // window.location.reload(); 
+      }
+    }
+  } catch (e) { console.error(e); }
+}
+
+async function saveAllBranding() {
+    const payload = {
+        company_name: document.getElementById('set-company-name').value,
+        logo_url: document.getElementById('set-logo-url').value,
+        favicon_url: document.getElementById('set-favicon-url').value
+    };
+    try {
+        const res = await fetch('/api/system_settings', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        });
+        const result = await res.json();
+        if (result.success) {
+            alert("Settings saved! Refreshing to apply changes.");
+            window.location.reload();
+        }
+    } catch (e) { alert("Error saving settings"); }
+}
+
+async function uploadAsset(type, input) {
+  const file = input.files[0];
+  if (!file) return;
+
+  const formData = new FormData();
+  formData.append('file', file);
+  formData.append('type', type);
+
+  try {
+    const res = await fetch('/api/upload_branding', {
+      method: 'POST',
+      body: formData
+    });
+    const data = await res.json();
+    if (data.success) {
+      if (type === 'logo') {
+        document.getElementById('set-logo-url').value = data.url;
+      } else {
+        document.getElementById('set-favicon-url').value = data.url;
+      }
+      updatePreview(type, data.url);
+      alert(`${type.charAt(0).toUpperCase() + type.slice(1)} uploaded successfully! Press Save Appearance Settings to apply.`);
+    } else {
+      alert("Upload failed: " + data.error);
+    }
+  } catch (e) {
+    console.error(e);
+    alert("Upload error.");
+  }
+}
+
+document.addEventListener('DOMContentLoaded', loadAppSettings);
+</script>
+{% endblock %}

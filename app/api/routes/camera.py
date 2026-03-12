@@ -80,7 +80,8 @@ def get_all_cameras(force: bool = False, user_email: str | None = None) -> list[
     with _camera_lock:
         if force or (time.time() - _camera_cache_ts) >= 60 or not _camera_cache:
             base_cams = [{"id": "webcam", "name": "Webcam (Built-in)", "status": "🟢 Online", "type": "webcam"}]
-            base_cams.extend(_fetch_imou_cameras())
+            # Imou cloud fetching disabled per user request
+            # base_cams.extend(_fetch_imou_cameras())
             _camera_cache    = base_cams
             _camera_cache_ts = time.time()
         cameras = list(_camera_cache)

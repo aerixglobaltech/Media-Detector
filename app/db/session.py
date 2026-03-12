@@ -145,6 +145,25 @@ def init_db() -> None:
         if admin_role:
             cur.execute("UPDATE users SET role_id = %s WHERE role_id IS NULL", (admin_role['id'],))
 
+        # System Settings Table (Branding, Appearance, etc.)
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS system_settings (
+                key   VARCHAR(100) PRIMARY KEY,
+                value TEXT
+            )
+        """)
+
+        # Seed Default Settings if table is empty or missing keys
+        default_settings = [
+            ('company_name',     'MISSION CONTROL'),
+            ('logo_url',         ''),
+            ('favicon_url',      ''),
+            ('theme_mode',       'light'),
+            ('show_breadcrumbs', 'true')
+        ]
+        for key, val in default_settings:
+            cur.execute("INSERT INTO system_settings (key, value) VALUES (%s, %s) ON CONFLICT (key) DO NOTHING", (key, val))
+
         # Cameras Table
         cur.execute("""
             CREATE TABLE IF NOT EXISTS local_cameras (
@@ -175,6 +194,38 @@ def init_db() -> None:
             )
         """)
         
+        # Telegram Bots Table (for multiple bot support)
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS telegram_bots (
+                id SERIAL PRIMARY KEY,
+                bot_name VARCHAR(100) NOT NULL,
+                bot_token TEXT NOT NULL,
+                chat_ids TEXT NOT NULL,
+                phone_number VARCHAR(50),
+                is_active BOOLEAN DEFAULT TRUE,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+
+        # Migrate existing settings to telegram_bots if first time
+        cur.execute("SELECT COUNT(*) FROM telegram_bots")
+        if cur.fetchone()['count'] == 0:
+            cur.execute("SELECT value FROM system_settings WHERE key = 'TELEGRAM_BOT_TOKEN'")
+            token_row = cur.fetchone()
+            if token_row and token_row['value']:
+                cur.execute("SELECT value FROM system_settings WHERE key = 'TELEGRAM_CHAT_ID'")
+                chat_row = cur.fetchone()
+                cur.execute("SELECT value FROM system_settings WHERE key = 'TELEGRAM_PHONE'")
+                phone_row = cur.fetchone()
+                
+                cur.execute(
+                    "INSERT INTO telegram_bots (bot_name, bot_token, chat_ids, phone_number) VALUES (%s, %s, %s, %s)",
+                    ("Primary Bot", token_row['value'], chat_row['value'] if chat_row else "", phone_row['value'] if phone_row else "")
+                )
+
+        # Remove legacy/migrated settings from system_settings
+        cur.execute("DELETE FROM system_settings WHERE key IN ('IMOU_APP_ID', 'IMOU_APP_SECRET', 'TELEGRAM_BOT_TOKEN', 'TELEGRAM_CHAT_ID', 'TELEGRAM_PHONE')")
+
         # Mandatory Schema Updates
         try:
             cur.execute("ALTER TABLE staff_profiles ADD COLUMN IF NOT EXISTS status VARCHAR(50) DEFAULT 'active'")

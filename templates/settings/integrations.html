@@ -1,5 +1,6 @@
 {% extends "base.html" %}
 {% set active_page = 'settings' %}
+{% set sub_page = 'integrations' %}
 
 {% block content %}
 <div style="height: calc(100vh - 53px); overflow-y: auto; background: var(--bg); padding: 28px;">
@@ -9,20 +10,38 @@
   <h2 class="s-mod-title">Integrations Hub</h2>
   <p class="s-mod-sub">Connect external services for alerts and cloud access.</p>
 
-  <div style="margin-top:28px; display:grid; grid-template-columns:1fr 1fr; gap:40px;">
-    <!-- Telegram -->
-    <div style="background: var(--surface2); padding:24px; border-radius:12px; border:1px solid var(--border);">
-      <h4 style="margin-bottom:16px; font-size:15px; display:flex; align-items:center; gap:8px; color: var(--text);">🔔 Telegram Bot Settings</h4>
-      <div class="s-field"><label>Bot Token</label><input type="password" id="setting-tg-token" placeholder="Enter Bot API Token" /></div>
-      <div class="s-field"><label>Target Chat IDs (comma separated)</label><input type="text" id="setting-tg-chats" placeholder="e.g. 1234567, -9876543" /></div>
-      <button onclick="saveGlobalSettings()" style="width:100%; padding:10px; background: var(--accent); color:white; border:none; border-radius:8px; font-weight:700; cursor:pointer;">Save Telegram Settings</button>
+  <div style="margin-top:28px;">
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:24px;">
+      <h3 style="font-size:16px; font-weight:700; color:var(--text);">Active Telegram Bots</h3>
+      <button onclick="openBotModal()" class="add-btn">+ Add New Bot</button>
     </div>
 
-    <!-- Imou -->
-    <div style="background: var(--surface2); padding:24px; border-radius:12px; border:1px solid var(--border);">
-      <h4 style="margin-bottom:16px; font-size:15px; display:flex; align-items:center; gap:8px; color: var(--text);">☁️ Imou Cloud Access</h4>
-      <div class="s-field"><label>App ID</label><input type="text" id="setting-appid" readonly /></div>
-      <p style="font-size:11px; color: var(--muted); line-height:1.4;">Imou credentials are managed in your account configuration. Contact support to change these values.</p>
+    <div id="bots-container" style="display:grid; grid-template-columns: repeat(auto-fill, minmax(350px, 1fr)); gap:24px;">
+      <!-- Bots will be injected here -->
+    </div>
+  </div>
+
+  <!-- Bot Modal -->
+  <div id="bot-modal" class="modal-overlay" style="display:none;">
+    <div class="modal-content">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px;">
+        <h2 id="modal-title" style="font-size:18px; font-weight:800;">Add New Telegram Bot</h2>
+        <button onclick="closeBotModal()" style="background:none; border:none; font-size:24px; cursor:pointer; color:var(--muted);">&times;</button>
+      </div>
+      
+      <input type="hidden" id="bot-id" />
+      <div class="s-field"><label>Bot Name</label><input type="text" id="bot-name" placeholder="e.g. Security Alerts Bot" /></div>
+      <div class="s-field">
+        <label>Bot Token</label>
+        <div style="position:relative;">
+          <input type="password" id="bot-token" placeholder="Enter Bot API Token" style="padding-right:45px;" />
+          <button type="button" onclick="toggleTokenVisibility()" style="position:absolute; right:12px; top:50%; transform:translateY(-50%); background:none; border:none; cursor:pointer; font-size:18px; color:var(--muted);">👁️</button>
+        </div>
+      </div>
+      <div class="s-field"><label>Target Chat IDs</label><input type="text" id="bot-chats" placeholder="e.g. 1234567, -9876543" /></div>
+      <div class="s-field"><label>Phone Number (Optional)</label><input type="text" id="bot-phone" placeholder="e.g. +91 98765 43210" /></div>
+      
+      <button onclick="saveBot()" id="save-bot-btn" class="save-btn">Save Bot Configuration</button>
     </div>
   </div>
 
@@ -30,32 +49,168 @@
 </div>
 
 <style>
+.add-btn { padding:10px 20px; background:var(--accent); color:white; border:none; border-radius:10px; font-size:13px; font-weight:700; cursor:pointer; transition: opacity 0.2s; }
+.add-btn:hover { opacity:0.9; }
+
 .s-back { display:inline-block; background:none; border: 1px solid var(--border); padding: 8px 16px; border-radius: 8px; font-size: 13px; font-weight: 600; color: var(--muted); cursor: pointer; margin-bottom: 24px; transition: all 0.2s; text-decoration:none; }
 .s-back:hover { border-color: var(--accent); color: var(--accent); }
 .s-mod-title { font-size: 22px; font-weight: 800; color: var(--text); margin:0 0 6px 0; }
 .s-mod-sub { font-size: 13px; color: var(--muted); margin:0; }
 .s-field { margin-bottom: 16px; }
-.s-field label { display: block; font-size: 12px; font-weight: 600; color: var(--text); margin-bottom: 4px; }
-.s-field input { width: 100%; padding: 8px 12px; border: 1px solid var(--border); border-radius: 6px; font-size: 13px; outline: none; background: var(--bg); color: var(--text); }
-.s-field input:focus { border-color: var(--accent); }
+.s-field label { display: block; font-size: 11px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 6px; }
+.s-field input { width: 100%; padding: 10px 14px; border: 1px solid var(--border); border-radius: 8px; font-size: 13px; outline: none; background: var(--bg); color: var(--text); transition: all 0.2s; }
+.s-field input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-bg); }
+
+.integration-card { background: var(--surface); padding:24px; border-radius:16px; border:1px solid var(--border); box-shadow: var(--shadow-sm); position:relative; }
+.card-header { display:flex; align-items:center; gap:16px; margin-bottom:20px; }
+.service-icon { width:40px; height:40px; border-radius:10px; display:flex; align-items:center; justify-content:center; font-size:18px; color:white; }
+.bot-info { flex:1; }
+.service-name { font-size:15px; font-weight:700; color:var(--text); margin-bottom:4px; }
+.status-badge { font-size:10px; font-weight:800; padding:2px 8px; border-radius:10px; text-transform:uppercase; }
+.status-badge.active { background:#ecfdf5; color:#059669; border:1px solid #059669; }
+.status-badge.inactive { background:#fef2f2; color:#dc2626; border:1px solid #dc2626; }
+
+.card-actions { position:absolute; top:20px; right:20px; }
+.dot-btn { background:none; border:none; color:var(--muted); cursor:pointer; font-size:20px; padding:4px; border-radius:4px; }
+.dot-btn:hover { background:var(--bg); }
+
+.dropdown { position:relative; display:inline-block; }
+.dropdown-content { display:none; position:absolute; right:0; background:var(--surface); min-width:120px; box-shadow:var(--shadow-lg); border-radius:8px; border:1px solid var(--border); z-index:10; }
+.dropdown:hover .dropdown-content { display:block; }
+.dropdown-content button { width:100%; padding:10px 14px; text-align:left; background:none; border:none; font-size:13px; cursor:pointer; color:var(--text); }
+.dropdown-content button:hover { background:var(--bg); }
+
+.save-btn { width:100%; padding:12px; background: var(--accent); color:white; border:none; border-radius:10px; font-weight:700; cursor:pointer; }
+
+/* Switch css */
+.switch { position: relative; display: inline-block; width: 40px; height: 22px; }
+.switch input { opacity: 0; width: 0; height: 0; }
+.slider { position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background-color: #ccc; transition: .4s; border-radius: 34px; }
+.slider:before { position: absolute; content: ""; height: 16px; width: 16px; left: 3px; bottom: 3px; background-color: white; transition: .4s; border-radius: 50%; }
+input:checked + .slider { background-color: var(--accent); }
+input:checked + .slider:before { transform: translateX(18px); }
+
+/* Modal */
+.modal-overlay { position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.5); display:flex; align-items:center; justify-content:center; z-index:1000; backdrop-filter: blur(4px); }
+.modal-content { background:var(--surface); width:100%; max-width:450px; padding:32px; border-radius:20px; box-shadow: var(--shadow-lg); }
 </style>
 
 <script>
-  document.addEventListener('DOMContentLoaded', loadGlobalSettings);
+  let ALL_BOTS = [];
 
-  async function loadGlobalSettings() {
+  document.addEventListener('DOMContentLoaded', loadBots);
+
+  async function loadBots() {
     try {
-      const res = await fetch('/api/settings_info');
+      const res = await fetch('/api/telegram_bots');
+      ALL_BOTS = await res.json();
+      renderBots();
+    } catch (e) {
+      console.error("Failed to load bots", e);
+    }
+  }
+
+  function renderBots() {
+    const container = document.getElementById('bots-container');
+    container.innerHTML = ALL_BOTS.map(bot => `
+      <div class="integration-card" onclick="editBot(${bot.id})" style="cursor: pointer;">
+        <div class="card-actions" onclick="event.stopPropagation()">
+           <div class="dropdown">
+              <button class="dot-btn">⋮</button>
+              <div class="dropdown-content">
+                <button onclick="editBot(${bot.id})">Edit</button>
+                <button onclick="toggleBot(${bot.id})">${bot.is_active ? 'Deactivate' : 'Activate'}</button>
+              </div>
+           </div>
+        </div>
+        <div class="card-header">
+          <div class="service-icon" style="background:#0088cc;">✈️</div>
+          <div class="bot-info">
+            <h4 class="service-name">${bot.bot_name}</h4>
+            <span class="status-badge ${bot.is_active ? 'active' : 'inactive'}">${bot.is_active ? 'Active' : 'Disabled'}</span>
+          </div>
+        </div>
+        <div style="font-size:12px; color:var(--muted); margin-bottom:8px;">
+          <strong>Chat IDs:</strong> ${bot.chat_ids.substring(0, 30)}${bot.chat_ids.length > 30 ? '...' : ''}
+        </div>
+        <div style="font-size:12px; color:var(--muted);">
+          <strong>Phone:</strong> ${bot.phone_number || 'N/A'}
+        </div>
+      </div>
+    `).join('');
+  }
+
+  function openBotModal(bot = null) {
+    document.getElementById('bot-id').value = bot ? bot.id : '';
+    document.getElementById('bot-name').value = bot ? bot.bot_name : '';
+    document.getElementById('bot-token').value = bot ? bot.bot_token : '';
+    document.getElementById('bot-chats').value = bot ? bot.chat_ids : '';
+    document.getElementById('bot-phone').value = bot ? bot.phone_number : '';
+    document.getElementById('modal-title').innerText = bot ? 'Edit Telegram Bot' : 'Add New Telegram Bot';
+    document.getElementById('bot-modal').style.display = 'flex';
+  }
+
+  function closeBotModal() {
+    document.getElementById('bot-modal').style.display = 'none';
+  }
+
+  async function saveBot() {
+    const payload = {
+      id: document.getElementById('bot-id').value || null,
+      bot_name: document.getElementById('bot-name').value || 'Telegram Bot',
+      bot_token: document.getElementById('bot-token').value,
+      chat_ids: document.getElementById('bot-chats').value,
+      phone_number: document.getElementById('bot-phone').value
+    };
+
+    if(!payload.bot_token || !payload.chat_ids) {
+      alert("Token and Chat IDs are required!");
+      return;
+    }
+
+    try {
+      const res = await fetch('/api/telegram_bots', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
       const data = await res.json();
-      document.getElementById('setting-appid').value = data.app_id||'';
-      document.getElementById('setting-tg-token').value = data.tg_token||'';
-      document.getElementById('setting-tg-chats').value = data.tg_chats||'';
+      if(data.success) {
+        closeBotModal();
+        loadBots();
+      } else {
+        alert("Error: " + data.error);
+      }
+    } catch (e) {
+      alert("Failed to save bot");
+    }
+  }
+
+  function editBot(id) {
+    const bot = ALL_BOTS.find(b => b.id === id);
+    if(bot) openBotModal(bot);
+  }
+
+  async function deleteBot(id) {
+    if(!confirm("Are you sure you want to delete this bot?")) return;
+    try {
+      const res = await fetch(`/api/telegram_bots/${id}`, { method: 'DELETE' });
+      const data = await res.json();
+      if(data.success) loadBots();
     } catch (e) {}
   }
 
-  async function saveGlobalSettings() {
-    // Note: You'll need to define the API endpoint for saving if it doesn't exist
-    alert("Save logic to be implemented or matched with existing API");
+  async function toggleBot(id) {
+    try {
+      const res = await fetch(`/api/telegram_bots/${id}/toggle`, { method: 'POST' });
+      const data = await res.json();
+      if(data.success) loadBots();
+    } catch (e) {}
+  }
+
+  function toggleTokenVisibility() {
+    const input = document.getElementById('bot-token');
+    input.type = input.type === 'password' ? 'text' : 'password';
   }
 </script>
 {% endblock %}

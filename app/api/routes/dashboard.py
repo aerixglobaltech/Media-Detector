@@ -83,3 +83,7 @@ def route_settings_users():
 def route_settings_roles():
     return render_template("settings/roles.html")
 
+@dashboard_bp.route("/settings/appearance")
+@login_required
+def route_settings_appearance():
+    return render_template("settings/appearance.html")

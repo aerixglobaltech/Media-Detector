@@ -34,29 +34,44 @@ def create_app() -> Flask:
     )
 
     @flask_app.context_processor
-    def inject_permissions():
+    def inject_user_data():
         from flask import session
         try:
             from app.db.session import get_db_connection
             user_email = session.get("user")
-            if not user_email: return dict(user_permissions={})
+            if not user_email: 
+                return dict(user_permissions={}, user_info=None)
             
             conn = get_db_connection()
             cur = conn.cursor()
-            cur.execute("SELECT r.permissions FROM users u LEFT JOIN roles r ON u.role_id = r.id WHERE u.email = %s", (user_email,))
+            cur.execute("SELECT u.name, u.email, r.permissions FROM users u LEFT JOIN roles r ON u.role_id = r.id WHERE u.email = %s", (user_email,))
             row = cur.fetchone()
+            # System Branding
+            cur = conn.cursor()
+            cur.execute("SELECT key, value FROM system_settings")
+            settings_rows = cur.fetchall()
+            sys_settings = {r['key']: r['value'] for r in settings_rows}
+            
             cur.close()
             conn.close()
             
+            if not row:
+                return dict(user_permissions={}, user_info=None, sys_settings=sys_settings)
+
+            user_info = {
+                "full_name": row.get('name', 'User'),
+                "email": row.get('email', '')
+            }
+            
             perms = {}
-            if row and row.get('permissions'):
+            if row.get('permissions'):
                 perms = row['permissions']
                 if isinstance(perms, str):
                     import json
                     perms = json.loads(perms)
-            return dict(user_permissions=perms)
+            return dict(user_permissions=perms, user_info=user_info, sys_settings=sys_settings)
         except Exception:
-            return dict(user_permissions={})
+            return dict(user_permissions={}, user_info=None, sys_settings={})
     flask_app.secret_key = os.environ.get("FLASK_SECRET_KEY", "super_secret_mission_control_key_xyz")
 
     # ── Upload folder ────────────────────────────────────────────────────────

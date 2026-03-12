@@ -154,14 +154,13 @@ h1, h2, h3, h4, p, label, span {
   box-shadow: var(--shadow-md);
   z-index: 100;
   display: none;
-  overflow: hidden;
 }
 .theme-dropdown.active { display: block; }
 
 .theme-item {
   padding: 12px 16px;
-  font-size: 13px;
-  font-weight: 500;
+  font-size: 14px;
+  font-weight: 600;
   color: var(--text);
   cursor: pointer;
   display: flex;
@@ -170,7 +169,50 @@ h1, h2, h3, h4, p, label, span {
   transition: var(--transition);
 }
 .theme-item:hover { background: var(--surface2); color: var(--accent); }
-.theme-item span { font-size: 16px; }
+.theme-item span { font-size: 16px; margin-right: 4px; }
+
+/* Nested Menu Styles */
+.menu-item-nested {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text);
+  cursor: pointer;
+  transition: var(--transition);
+}
+
+.menu-item-nested:hover {
+  background: var(--surface2);
+  color: var(--accent);
+}
+
+.menu-item-nested .submenu {
+  position: absolute;
+  left: 100%;
+  bottom: 0;
+  min-width: 160px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  box-shadow: var(--shadow-lg);
+  display: none;
+  z-index: 120;
+  margin-left: 5px;
+}
+
+.menu-item-nested:hover .submenu,
+.menu-item-nested.open .submenu {
+  display: block;
+}
+
+.arrow-right {
+  font-size: 14px;
+  opacity: 0.6;
+}
 
 .video-area {
   background: #060a12;

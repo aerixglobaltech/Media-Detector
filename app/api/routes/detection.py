@@ -68,27 +68,67 @@ def api_toggles():
 
 @api_bp.route("/api/dashboard_info")
 def api_dashboard_info():
-    """Stats card data: motion events, unique people, camera online/offline counts."""
-    from app.services.camera_service import _total_motion_events
-
-    unique_people = 0
+    """Stats card data: camera counts, staff counts, active users."""
+    staff_count = 0
+    user_count = 0
+    db_status = "error"
+    
     try:
-        if cam_mgr._pipeline and hasattr(cam_mgr._pipeline, "tracker"):
-            ds = cam_mgr._pipeline.tracker.tracker
-            unique_people = max(0, ds.tracker._next_id - 1)
-    except Exception:
-        pass
+        # Get DB counts with explicit aliasing for RealDictCursor compatibility
+        conn = get_db_connection()
+        cur = conn.cursor()
+        
+        cur.execute("SELECT COUNT(*) as count FROM staff_profiles")
+        row = cur.fetchone()
+        if row: staff_count = int(row['count'])
+        
+        cur.execute("SELECT COUNT(*) as count FROM users")
+        row = cur.fetchone()
+        if row: user_count = int(row['count'])
+        
+        cur.close()
+        conn.close()
+        db_status = "connected"
+    except Exception as e:
+        log.error("DASHBOARD DB ERROR: %s", e)
+        db_status = f"error: {str(e)}"
 
     user_email = session.get("user")
     cams = get_all_cameras(user_email=user_email)
-    online_count  = sum(1 for c in cams if "Online"  in c.get("status", ""))
-    offline_count = sum(1 for c in cams if "Offline" in c.get("status", ""))
+    
+    online_count  = 0
+    for c in cams:
+        status = c.get("status", "").lower()
+        if "online" in status or "🟢" in status:
+            online_count += 1
+            
+    total_cameras = len(cams)
 
+    log.info("DASHBOARD_INFO [v2] -> Online: %d, Total: %d, Staff: %d, Users: %d, DB: %s", 
+             online_count, total_cameras, staff_count, user_count, db_status)
+
+    # System Health logic
+    ai_status = "error"
+    if cam_mgr and hasattr(cam_mgr, "_pipeline") and cam_mgr._pipeline:
+        # Check if the AI thread is running
+        if hasattr(cam_mgr._pipeline, "is_alive") and cam_mgr._pipeline.is_alive():
+            ai_status = "running"
+        else:
+            ai_status = "idle"
+
+    # Media server is "active" if we can see cameras
+    media_status = "active" if total_cameras > 0 else "idle"
+
+    # Use unique keys to avoid conflict with any old cached JS
     return jsonify({
-        "total_motion_events": _total_motion_events,
-        "unique_people":       unique_people,
-        "online_cameras":      online_count,
-        "offline_cameras":     offline_count,
+        "dashboard_v":   "2.0",
+        "cam_online":    online_count,
+        "cam_total":     total_cameras,
+        "staff_total":   staff_count,
+        "user_total":    user_count,
+        "db_status":     db_status,
+        "ai_status":     ai_status,
+        "media_status":  media_status
     })
 
 
@@ -107,14 +147,92 @@ def api_notify_manual():
 
 # ─── Settings ─────────────────────────────────────────────────────────────────
 
-@api_bp.route("/api/settings_info")
-def api_settings_info():
-    """Return current .env values shown as read-only on the settings page."""
-    return jsonify({
-        "app_id":   os.environ.get("IMOU_APP_ID",         ""),
-        "tg_token": os.environ.get("TELEGRAM_BOT_TOKEN",  ""),
-        "tg_chats": os.environ.get("TELEGRAM_CHAT_ID",    ""),
-    })
+@api_bp.route("/api/telegram_bots", methods=["GET"])
+@login_required
+def api_list_telegram_bots():
+    """List all configured Telegram bots."""
+    try:
+        conn = get_db_connection()
+        cur = conn.cursor()
+        cur.execute("SELECT id, bot_name, bot_token, chat_ids, phone_number, is_active FROM telegram_bots ORDER BY id ASC")
+        rows = cur.fetchall()
+        cur.close()
+        conn.close()
+        return jsonify(rows)
+    except Exception as e:
+        log.error("Error listing bots: %s", e)
+        return jsonify({"error": str(e)}), 500
+
+@api_bp.route("/api/telegram_bots", methods=["POST"])
+@login_required
+def api_upsert_telegram_bot():
+    """Add or update a Telegram bot."""
+    try:
+        data = request.get_json(force=True)
+        bot_id = data.get("id")
+        name   = data.get("bot_name", "Telegram Bot")
+        token  = data.get("bot_token")
+        chats  = data.get("chat_ids")
+        phone  = data.get("phone_number")
+        
+        if not token or not chats:
+            return jsonify({"success": False, "error": "Token and Chat IDs are required"}), 400
+
+        conn = get_db_connection()
+        cur = conn.cursor()
+        if bot_id:
+            cur.execute(
+                "UPDATE telegram_bots SET bot_name=%s, bot_token=%s, chat_ids=%s, phone_number=%s WHERE id=%s",
+                (name, token, chats, phone, bot_id)
+            )
+        else:
+            cur.execute(
+                "INSERT INTO telegram_bots (bot_name, bot_token, chat_ids, phone_number) VALUES (%s, %s, %s, %s)",
+                (name, token, chats, phone)
+            )
+        conn.commit()
+        cur.close()
+        conn.close()
+        return jsonify({"success": True})
+    except Exception as e:
+        log.error("Error upserting bot: %s", e)
+        return jsonify({"success": False, "error": str(e)}), 500
+
+@api_bp.route("/api/telegram_bots/<int:bot_id>", methods=["DELETE"])
+@login_required
+def api_delete_telegram_bot(bot_id):
+    """Delete a Telegram bot."""
+    try:
+        conn = get_db_connection()
+        cur = conn.cursor()
+        cur.execute("DELETE FROM telegram_bots WHERE id=%s", (bot_id,))
+        conn.commit()
+        cur.close()
+        conn.close()
+        return jsonify({"success": True})
+    except Exception as e:
+        log.error("Error deleting bot: %s", e)
+        return jsonify({"success": False, "error": str(e)}), 500
+
+@api_bp.route("/api/telegram_bots/<int:bot_id>/toggle", methods=["POST"])
+@login_required
+def api_toggle_telegram_bot(bot_id):
+    """Toggle a bot's active status."""
+    try:
+        conn = get_db_connection()
+        cur = conn.cursor()
+        cur.execute("UPDATE telegram_bots SET is_active = NOT is_active WHERE id=%s RETURNING is_active", (bot_id,))
+        res = cur.fetchone()
+        if not res:
+            return jsonify({"success": False, "error": "Bot not found"}), 404
+        new_status = res['is_active']
+        conn.commit()
+        cur.close()
+        conn.close()
+        return jsonify({"success": True, "active": new_status})
+    except Exception as e:
+        log.error("Error toggling bot: %s", e)
+        return jsonify({"success": False, "error": str(e)}), 500
 
 
 # ─── User Profile ─────────────────────────────────────────────────────────────
@@ -396,3 +514,88 @@ def api_delete_staff_photo(staff_name: str, filename: str):
         return jsonify({"success": True})
 
     return jsonify({"error": "File not found"}), 404
+
+@api_bp.route("/api/system_settings", methods=["GET"])
+@login_required
+def api_get_system_settings():
+    """Retrieve all system settings (branding, appearance, etc)."""
+    try:
+        conn = get_db_connection()
+        cur = conn.cursor()
+        cur.execute("SELECT key, value FROM system_settings")
+        rows = cur.fetchall()
+        settings = {r['key']: r['value'] for r in rows}
+        cur.close()
+        conn.close()
+        return jsonify(settings)
+    except Exception as e:
+        log.error("Error fetching system settings: %s", e)
+        return jsonify({"error": str(e)}), 500
+
+@api_bp.route("/api/system_settings", methods=["POST"])
+@login_required
+def api_update_system_settings():
+    """Update system settings (branding, appearance, etc)."""
+    try:
+        data = request.get_json(force=True)
+        if not data:
+            return jsonify({"success": False, "error": "No data provided"}), 400
+            
+        conn = get_db_connection()
+        cur = conn.cursor()
+        for key, value in data.items():
+            cur.execute(
+                "INSERT INTO system_settings (key, value) VALUES (%s, %s) ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value",
+                (key, str(value))
+            )
+        conn.commit()
+        cur.close()
+        conn.close()
+        return jsonify({"success": True})
+    except Exception as e:
+        log.error("Error updating system settings: %s", e)
+        return jsonify({"success": False, "error": str(e)}), 500
+
+@api_bp.route("/api/upload_branding", methods=["POST"])
+@login_required
+def api_upload_branding():
+    """Upload branding assets (Logo or Favicon)."""
+    try:
+        if 'file' not in request.files or 'type' not in request.form:
+             return jsonify({"success": False, "error": "Missing file or type"}), 400
+        
+        file = request.files['file']
+        setting_type = request.form['type'] # 'logo' or 'favicon'
+        
+        if file.filename == '':
+            return jsonify({"success": False, "error": "No selected file"}), 400
+            
+        filename = secure_filename(file.filename)
+        branding_dir = os.path.join(_upload_folder(), "branding")
+        os.makedirs(branding_dir, exist_ok=True)
+        
+        # Create a unique filename to prevent browser caching issues
+        import time
+        ext = os.path.splitext(filename)[1]
+        unique_filename = f"{setting_type}_{int(time.time())}{ext}"
+        save_path = os.path.join(branding_dir, unique_filename)
+        file.save(save_path)
+        
+        url = url_for('static', filename=f'uploads/branding/{unique_filename}')
+        
+        # Persistence: Update database
+        key = 'logo_url' if setting_type == 'logo' else 'favicon_url'
+        conn = get_db_connection()
+        cur = conn.cursor()
+        cur.execute(
+            "INSERT INTO system_settings (key, value) VALUES (%s, %s) ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value",
+            (key, url)
+        )
+        conn.commit()
+        cur.close()
+        conn.close()
+        
+        return jsonify({"success": True, "url": url})
+    except Exception as e:
+        log.error("Error uploading branding: %s", e)
+        return jsonify({"success": False, "error": str(e)}), 500
