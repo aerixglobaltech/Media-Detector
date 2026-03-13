@@ -16,6 +16,7 @@ import logging
 import queue
 import threading
 import time
+from datetime import datetime
 import json
 import os
 
@@ -156,6 +157,103 @@ class AIPipeline(threading.Thread):
         self._active_ids: set[int] = set()
         self.entries = 0
         self.exits   = 0
+        self._entry_best_frames: dict[int, np.ndarray] = {}  # Best shot near entry
+        self._exit_best_frames:  dict[int, np.ndarray] = {}  # Best shot near exit (continuous)
+        self._best_entry_scores: dict[int, float]      = {}
+        self._best_exit_scores:  dict[int, float]      = {}
+        self._track_start_time:  dict[int, float]      = {}  # Records when an ID first appeared
+        self._exit_taken: set[int] = set()                  # Track IDs that already have an exit shot
+        self._db_sessions: dict[int, int] = {}             # Tracks DB row ID for each person session
+        self._exit_filenames: dict[int, str] = {}          # Stores filenames for DB exit logging
+        os.makedirs(cfg.SNAPSHOT_DIR, exist_ok=True)
+
+    def _calculate_clarity(self, frame, bbox=None):
+        """Calculates frame clarity using Laplacian variance. Higher = Sharp/Clear."""
+        try:
+            if bbox is not None:
+                x1, y1, x2, y2 = (int(v) for v in bbox)
+                y1, y2 = max(0, y1), min(frame.shape[0], y2)
+                x1, x2 = max(0, x1), min(frame.shape[1], x2)
+                crop = frame[y1:y2, x1:x2]
+                if crop.size == 0: return 0.0
+                gray = cv2.cvtColor(crop, cv2.COLOR_BGR2GRAY)
+            else:
+                gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+            return cv2.Laplacian(gray, cv2.CV_64F).var()
+        except:
+            return 0.0
+
+    def _save_snapshot(self, frame, tid, mode="ENTRY"):
+        """Saves a forensic snapshot of a person entry or exit."""
+        if not cfg.ENABLE_SNAPSHOTS or frame is None:
+            return
+        
+        try:
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            filename = f"{mode.lower()}_{self.camera_name.replace(' ', '_')}_ID{tid}_{timestamp}.jpg"
+            filepath = os.path.join(cfg.SNAPSHOT_DIR, filename)
+            
+            # Create a forensic copy with metadata overlay
+            snap_frame = frame.copy()
+            # Draw metadata bar (Entry = Green, Exit = Red)
+            color = (0, 255, 0) if mode == "ENTRY" else (0, 0, 255)
+            text = f"{mode}: {self.camera_name} | ID: {tid} | {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
+            cv2.rectangle(snap_frame, (0, 0), (snap_frame.shape[1], 35), (0, 0, 0), -1)
+            cv2.putText(snap_frame, text, (10, 25), cv2.FONT_HERSHEY_SIMPLEX, 0.6, color, 2)
+            
+            cv2.imwrite(filepath, snap_frame)
+            log.info(f"📸 {mode} SNAPSHOT SAVED: {filepath} (ID: {tid})")
+            return snap_frame, filename
+        except Exception as e:
+            log.error(f"Failed to save {mode} snapshot: {e}")
+            return None, None
+
+    def _save_merged(self, entry_f, exit_f, tid):
+        """Creates a side-by-side Merged Forensic Masterpiece."""
+        if entry_f is None or exit_f is None: return
+        try:
+            h = 480
+            w_e = int(entry_f.shape[1] * (h / entry_f.shape[0]))
+            w_x = int(exit_f.shape[1] * (h / exit_f.shape[0]))
+            merged = np.hstack((cv2.resize(entry_f, (w_e, h)), cv2.resize(exit_f, (w_x, h))))
+            
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            filename = f"merged_{self.camera_name.replace(' ', '_')}_ID{tid}_{timestamp}.jpg"
+            cv2.imwrite(os.path.join(cfg.SNAPSHOT_DIR, filename), merged)
+            log.info(f"🔗 MERGED LOG SAVED: {filename}")
+            return filename
+        except Exception as e:
+            log.error(f"Merge error: {e}")
+            return None
+
+    def _db_log_entry(self, tid, filename):
+        """Creates a forensic entry record in the database."""
+        try:
+            conn = get_db_connection()
+            with conn.cursor() as cur:
+                cur.execute("""
+                    INSERT INTO member_time_stamp (person_id, camera_name, entry_image, entry_time)
+                    VALUES (%s, %s, %s, %s) RETURNING id
+                """, (tid, self.camera_name, filename, datetime.now()))
+                self._db_sessions[tid] = cur.fetchone()['id']
+            conn.commit(); conn.close()
+        except Exception as e:
+            log.error(f"DB Entry log error: {e}")
+
+    def _db_log_exit(self, tid, exit_file, merged_file=None):
+        """Finalizes a forensic session in the database with exit and merged files."""
+        if tid not in self._db_sessions: return
+        try:
+            conn = get_db_connection()
+            with conn.cursor() as cur:
+                cur.execute("""
+                    UPDATE member_time_stamp 
+                    SET exit_image = %s, merged_image = %s, exit_time = %s
+                    WHERE id = %s
+                """, (exit_file, merged_file, datetime.now(), self._db_sessions[tid]))
+            conn.commit(); conn.close()
+        except Exception as e:
+            log.error(f"DB Exit log error: {e}")
 
     def stop(self):
         self._stop_evt.set()
@@ -261,26 +359,90 @@ class AIPipeline(threading.Thread):
 
         raw_tracks = self.tracker.update(self._last_detections, ai_frame)
         active_ids = {t.track_id for t in raw_tracks}
-        # --- Robust Detection-based Counting ---
-        active_ids = {t.track_id for t in raw_tracks}
         
-        # 1. New Entrants: IDs we've never seen before in this session
+        # 1. New Entrants
         for tid in active_ids:
             if tid not in self._seen_ids:
                 self.entries += 1
                 self._seen_ids.add(tid)
+                self._track_start_time[tid] = now
                 log.info(f"COUNT: New person entering frame (ID: {tid}). Total Entries: {self.entries}")
 
         # 2. Exits: IDs that WERE in active_ids but are now gone
-        # Compare current active_ids with our last known _active_ids
         for tid in list(self._active_ids):
             if tid not in active_ids:
                 self.exits += 1
-                log.info(f"COUNT: Person left frame (ID: {tid}). Total Exits: {self.exits}")
+                log.info(f"COUNT: Person left (ID: {tid}). Total Exits: {self.exits}")
+                
+                # Retrieve the BEST shots for Entry and Exit
+                entry_f = self._entry_best_frames.get(tid)
+                exit_f  = self._exit_best_frames.get(tid)
+                
+                # Save Exit snapshot (Fallback if edge trigger didn't hit)
+                exit_file = self._exit_filenames.get(tid)
+                if tid not in self._exit_taken:
+                    exit_f_processed, exit_file = self._save_snapshot(exit_f, tid, mode="EXIT")
+                else:
+                    exit_f_processed = exit_f # Already contains the edge shot
+                
+                # Save Merged snapshot
+                merged_file = None
+                if entry_f is not None and exit_f_processed is not None:
+                    merged_file = self._save_merged(entry_f, exit_f_processed, tid)
+                
+                # Finalize DB Record
+                self._db_log_exit(tid, exit_file, merged_file)
+                
+                # Cleanup local track memory
+                for d in [self._entry_best_frames, self._exit_best_frames, self._best_entry_scores, self._best_exit_scores, self._track_start_time, self._db_sessions, self._exit_filenames]:
+                    if tid in d: del d[tid]
+                if tid in self._exit_taken: self._exit_taken.remove(tid)
         
-        # Update last known active IDs
-        self._active_ids = active_ids
+        # 3. Best-Shot Monitoring (During Active Stay)
+        for track in raw_tracks:
+            tid = track.track_id
+            score = self._calculate_clarity(ai_frame, track.bbox)
+            
+            # --- Entry Shot (Capture first sharp frame and LOCK) ---
+            if tid not in self._best_entry_scores:
+                # After a short stabilization or a high-clarity score, take the shot
+                if score > 45 or self._frame_idx % 12 == 0:
+                    self._best_entry_scores[tid] = score
+                    snap, filename = self._save_snapshot(ai_frame, tid, mode="ENTRY")
+                    if snap is not None: 
+                        self._entry_best_frames[tid] = snap
+                        self._db_log_entry(tid, filename)
 
+            # Priority 1: Proactive Edge Trigger (Capture and COMMIT to DB immediately)
+            # GUARD: Only allow EXIT snapshot if the person has been in frame for at least 3 seconds
+            stay_duration = now - self._track_start_time.get(tid, now)
+            
+            bx1, by1, bx2, by2 = track.bbox
+            is_leaving = (bx1 < 15 or by1 < 15 or bx2 > (ai_w - 15) or by2 > (ai_h - 15))
+            
+            if is_leaving and stay_duration > 3.0 and tid not in self._exit_taken and self._frame_idx % 3 == 0:
+                log.info(f"📸 PROACTIVE EXIT TRIGGER: ID {tid} is leaving. stay={stay_duration:.1f}s")
+                snap, exit_file = self._save_snapshot(ai_frame, tid, mode="EXIT")
+                if snap is not None:
+                    self._exit_best_frames[tid] = snap
+                    self._exit_filenames[tid] = exit_file
+                    self._exit_taken.add(tid)
+                    
+                    # COMMIT TO DB NOW (Forensic Instant Persistence)
+                    entry_f = self._entry_best_frames.get(tid)
+                    merged_file = self._save_merged(entry_f, snap, tid) if entry_f is not None else None
+                    self._db_log_exit(tid, exit_file, merged_file)
+
+            # Priority 2: Continuous Buffer (Sharpest frame so far)
+            if tid not in self._exit_taken:
+                if tid not in self._best_exit_scores or score >= (self._best_exit_scores[tid] * 0.40):
+                    self._best_exit_scores[tid] = max(score, self._best_exit_scores.get(tid, 0))
+                    self._exit_best_frames[tid] = ai_frame.copy()
+            
+            # Fallback: If it's the absolute last frame they are seen, we MUST update to capture 'The End'
+            # (Handled by the fact that the loop runs for every visible frame)
+
+        self._active_ids = active_ids
         if active_ids:
             self._last_motion_time = now
 
@@ -337,7 +499,6 @@ class AIPipeline(threading.Thread):
                         skip_frames=15, 
                         backend=cfg.EMOTION_BACKEND,
                     )
-                    sync_ai_knowledge()
 
                 # Emotion
                 person_crop = ai_frame[by1:by2, bx1:bx2]
@@ -440,6 +601,13 @@ class CameraManager:
             self._pipeline.exits = 0
             self._pipeline._seen_ids = set()
             self._pipeline._active_ids = set()
+            self._pipeline._entry_best_frames = {}
+            self._pipeline._exit_best_frames = {}
+            self._pipeline._best_entry_scores = {}
+            self._pipeline._best_exit_scores = {}
+            self._pipeline._track_start_time = {}
+            self._pipeline._db_sessions = {}
+            self._pipeline._exit_filenames = {}
 
         stream = VideoStream(
             source=source,
@@ -659,14 +827,23 @@ def init_db():
             )
         """)
         
-        # Upgrade existing table
-        try:
-            cur.execute("ALTER TABLE uploaded_images ADD COLUMN IF NOT EXISTS face_encoding TEXT")
-        except: pass
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS member_time_stamp (
+                id SERIAL PRIMARY KEY,
+                person_id INTEGER,
+                camera_name TEXT,
+                entry_image TEXT,
+                exit_image TEXT,
+                merged_image TEXT,
+                entry_time TIMESTAMP,
+                exit_time TIMESTAMP,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
             
         conn.commit()
         cur.close()
-        log.info("Database initialized safely.")
+        log.info("Database initialized safely (Forensic Vault activated).")
     except Exception as e:
         log.error(f"DB init failed: {e}")
     finally:

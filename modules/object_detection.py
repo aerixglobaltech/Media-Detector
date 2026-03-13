@@ -87,19 +87,13 @@ class PersonDetector:
                 # 1. Kill "Giant Ghost Boxes" (Likely background wall/floor errors)
                 bw, bh = (x2 - x1), (y2 - y1)
                 fw, fh = frame.shape[1], frame.shape[0]
-                if bw > (fw * 0.75) or bh > (fh * 0.75):
+                if bw > (fw * 0.98) or bh > (fh * 0.98):
                     continue
 
-                # 2. Filter out "Noise" (ignore objects smaller than 6% of frame height)
-                if bh < (fh * 0.06):
+                # 2. Filter out tiny artifacts (Noise)
+                if bh < (fh * 0.05):
                     continue
 
-                # 3. Smart Proportion Filter (Principal Fix)
-                # Humans are vertical. Sitting people can be square-ish.
-                # If width is > 1.8x height, it's definitely a desk/laptop, not a human.
-                if bw > (bh * 1.8):
-                    continue
-                    
                 boxes.append([x1, y1, x2, y2, conf])
 
         return boxes

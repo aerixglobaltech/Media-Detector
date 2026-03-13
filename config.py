@@ -41,7 +41,7 @@ MOTION_COOLDOWN_SEC: float = 30.0
 
 # ─── Person Detection (YOLOv8) ─────────────────────────────────────────────
 YOLO_MODEL:       str   = "yolov8n.pt"  # Nano Model: Exact speed of reference videos
-YOLO_CONF:        float = 0.40          # High Clarity: Kills background "Ghost" boxes
+YOLO_CONF:        float = 0.30          # Webb-Presence Fix: Detects desk-sitting people reliably
 YOLO_DEVICE:      str   = "cpu" 
 YOLO_SKIP_FRAMES: int   = 0             # Direct movement processing
 
@@ -52,7 +52,7 @@ import os
 DETECTION_MODE: str = os.environ.get("DETECTION_MODE", "yolo_only")  # Optimized for CPU DEMO speed
 
 # ─── Tracking (DeepSORT) ───────────────────────────────────────────────────
-DEEPSORT_MAX_AGE:  int = 20             # Balanced: No flickering, but instant ID cleanup
+DEEPSORT_MAX_AGE:  int = 80             # High-Stability: Prevents ID flipping during occlusion
 DEEPSORT_N_INIT:   int = 2              # Rapid confirmation
 DEEPSORT_MAX_IOU:  float = 0.7          
 DEEPSORT_EMBEDDER: str = "mobilenet"
@@ -88,3 +88,7 @@ COLOR_EXIT:     tuple = (0, 0, 255)   # Red
 SHOW_MOTION_MASK: bool = False
 WINDOW_NAME:      str  = "AI CCTV Surveillance"
 SHOW_TRIPWIRE:    bool = False
+
+# ─── Snapshots (Security Logs) ─────────────────────────────────────────────
+ENABLE_SNAPSHOTS: bool = True
+SNAPSHOT_DIR:     str  = "snapshots"
