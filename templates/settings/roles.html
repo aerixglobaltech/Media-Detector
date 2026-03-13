@@ -9,11 +9,17 @@
         <!-- Page Header -->
         <div style="display: flex; justify-content: space-between; align-items: flex-end; margin-bottom: 24px;">
             <div>
-                <a href="/settings" style="text-decoration: none; font-size: 13px; color: var(--accent); font-weight: 600;">‹ Back to Settings</a>
-                <h1 style="font-size: 24px; font-weight: 800; color: var(--text); margin: 8px 0 4px;">Roles & Permissions</h1>
+                {% if sys_settings.show_breadcrumbs == 'true' %}
+                <a href="/settings" style="text-decoration: none; font-size: 13px; color: var(--accent); font-weight: 600; display: block; margin-bottom: 8px;">‹ Back to Settings</a>
+                {% endif %}
+                <h1 style="font-size: 24px; font-weight: 800; color: var(--text); margin: 0 0 4px;">Roles & Permissions</h1>
                 <p style="font-size: 14px; color: var(--muted); margin: 0;">Configure access control and permissions for different user levels</p>
             </div>
-            <div style="display: flex; gap: 12px;">
+            <div style="display: flex; gap: 12px; align-items: center;">
+                <div style="position: relative;">
+                    <svg style="position: absolute; left: 12px; top: 50%; transform: translateY(-50%); color: var(--muted); width: 16px; height: 16px; pointer-events: none;" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>
+                    <input type="text" id="role-search" placeholder="Search roles..." oninput="handleSearch(this.value)" style="padding: 10px 10px 10px 36px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); color: var(--text); font-size: 13px; outline: none; width: 220px; transition: border-color 0.2s;">
+                </div>
                 <button onclick="openCreateRoleModal()" style="background: var(--accent); color: white; border: none; padding: 10px 20px; border-radius: 8px; font-weight: 600; cursor: pointer; display: flex; align-items: center; gap: 8px; font-size: 13px; box-shadow: var(--shadow-sm);">
                     <span>+</span> Create Role
                 </button>
@@ -38,6 +44,32 @@
                     <!-- Loaded via JS -->
                 </tbody>
             </table>
+
+            <!-- Pagination Footer -->
+            <div style="padding: 16px 24px; border-top: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; background: var(--surface2); border-radius: 0 0 12px 12px;">
+                <div style="font-size: 13px; color: var(--muted); font-weight: 500;" id="rows-selected-count">
+                    0 of 0 row(s) selected.
+                </div>
+                <div style="display: flex; align-items: center; gap: 24px;">
+                    <div style="display: flex; align-items: center; gap: 8px;">
+                        <span style="font-size: 13px; color: var(--text); font-weight: 500;">Rows per page</span>
+                        <select id="rows-per-page" onchange="handleLimitChange()" style="padding: 4px 8px; border-radius: 6px; border: 1px solid var(--border); background: var(--surface); color: var(--text); font-size: 12px; font-weight: 600; outline: none; cursor: pointer;">
+                            <option value="10">10</option>
+                            <option value="25">25</option>
+                            <option value="50">50</option>
+                        </select>
+                    </div>
+                    <div id="pagination-status" style="font-size: 13px; color: var(--text); font-weight: 600; min-width: 80px; text-align: center;">
+                        Page 1 of 1
+                    </div>
+                    <div style="display: flex; gap: 8px;">
+                        <button onclick="changePage('first')" id="btn-first" class="pag-btn" title="First Page">«</button>
+                        <button onclick="changePage('prev')" id="btn-prev" class="pag-btn" title="Previous Page">‹</button>
+                        <button onclick="changePage('next')" id="btn-next" class="pag-btn" title="Next Page">›</button>
+                        <button onclick="changePage('last')" id="btn-last" class="pag-btn" title="Last Page">»</button>
+                    </div>
+                </div>
+            </div>
         </div>
 
         <!-- Permission Matrix Section -->
@@ -144,11 +176,46 @@
 .perm-opt { display: flex; align-items: center; gap: 4px; font-size: 12px; color: var(--muted); }
 .perm-opt input { width: 15px; height: 15px; cursor: pointer; }
 
-tr:hover { background: var(--surface2); }
+tr:hover { background: var(--surface2); cursor: pointer; }
+
+/* Switch Toggle Styling */
+.switch { position: relative; display: inline-block; width: 44px; height: 22px; }
+.switch input { opacity: 0; width: 0; height: 0; }
+.slider { position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background-color: #feb2b2; transition: .4s; border-radius: 22px; }
+.slider:before { position: absolute; content: ""; height: 16px; width: 16px; left: 3px; bottom: 3px; background-color: white; transition: .4s; border-radius: 50%; }
+input:checked + .slider { background-color: #9ae6b4; }
+input:checked + .slider:before { transform: translateX(22px); }
+
+/* Pagination Buttons */
+.pag-btn {
+    width: 32px; height: 32px; display: flex; align-items: center; justify-content: center;
+    background: var(--surface); border: 1px solid var(--border); border-radius: 6px;
+    color: var(--text); font-size: 16px; cursor: pointer; transition: all 0.2s;
+}
+.pag-btn:hover:not(:disabled) { background: var(--surface2); border-color: var(--accent); color: var(--accent); }
+.pag-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+.role-row-clickable { transition: all 0.2s; }
+.role-row-clickable:hover { background: var(--surface2) !important; }
 </style>
 
 <script>
 let allRoles = [];
+let currentPage = 1;
+let rowLimit = 10;
+let totalPages = 1;
+let searchTerm = '';
+let searchTimeout;
+
+function handleSearch(term) {
+    clearTimeout(searchTimeout);
+    searchTimeout = setTimeout(() => {
+        searchTerm = term.trim();
+        currentPage = 1; // Reset to page 1 on search
+        loadRoles();
+    }, 300); // 300ms debounce
+}
+
 const appModules = [
     { id: 'users', name: 'Users' },
     { id: 'roles', name: 'Roles' },
@@ -160,21 +227,26 @@ const appModules = [
 ];
 
 async function loadRoles() {
-    const res = await fetch('/api/settings/roles');
-    allRoles = await res.json();
+    const res = await fetch(`/api/settings/roles?page=${currentPage}&limit=${rowLimit}&search=${encodeURIComponent(searchTerm)}`);
+    const data = await res.json();
+    allRoles = data.roles;
+    totalPages = data.total_pages;
+    
+    document.getElementById('rows-selected-count').textContent = `0 of ${data.total} row(s) selected.`;
+    
     const body = document.getElementById('role-table-body');
     body.innerHTML = allRoles.map(r => {
         let permCount = 0;
         if (r.permissions) {
             if (r.permissions.all) {
-                permCount = appModules.length * 4; // Total possible perms
+                permCount = appModules.length * 4; 
             } else {
                 permCount = Object.keys(r.permissions).length;
             }
         }
         const isActive = (r.status === 'active');
         return `
-        <tr style="border-bottom: 1px solid var(--border);">
+        <tr class="role-row-clickable" onclick="openEditRoleById(${r.id})" style="border-bottom: 1px solid var(--border);">
             <td style="padding: 16px; font-weight: 700; color: var(--text); font-size: 14px;">${r.name}</td>
             <td style="padding: 16px; font-size: 13px; color: var(--muted);">${r.description || ''}</td>
             <td style="padding: 16px;">
@@ -190,18 +262,47 @@ async function loadRoles() {
                 </span>
             </td>
             <td style="padding: 16px;" class="actions-cell">
-                <button class="actions-btn" onclick="toggleActions(event, ${r.id})">⋮</button>
+                <div style="display: flex; align-items: center; justify-content: flex-end; gap: 12px;">
+                    <label class="switch" onclick="event.stopPropagation()">
+                        <input type="checkbox" ${isActive ? 'checked' : ''} onchange="toggleRoleStatus(${r.id}, this.checked ? 'active' : 'inactive')">
+                        <span class="slider"></span>
+                    </label>
+                    <button class="actions-btn" onclick="toggleActions(event, ${r.id})">⋮</button>
+                </div>
                 <div id="role-actions-${r.id}" class="actions-dropdown">
-                    <div class="dropdown-item" onclick='openEditRoleById(${r.id})'><span>✏️</span> Edit Role</div>
-                    ${!r.is_system ? `<div class="dropdown-item ${isActive ? 'danger' : ''}" onclick="toggleRoleStatus(${r.id}, '${isActive ? 'inactive' : 'active'}')">
+                    <div class="dropdown-item" onclick='event.stopPropagation(); openEditRoleById(${r.id})'><span>✏️</span> Edit Role</div>
+                    <div class="dropdown-item ${isActive ? 'danger' : ''}" onclick="event.stopPropagation(); toggleRoleStatus(${r.id}, '${isActive ? 'inactive' : 'active'}')">
                         <span>${isActive ? '🔴' : '🟢'}</span> ${isActive ? 'Deactivate' : 'Activate'}
-                    </div>` : ''}
+                    </div>
                 </div>
             </td>
         </tr>
     `}).join('');
     
+    updatePaginationUI(data);
     renderPermissionMatrix(allRoles);
+}
+
+function updatePaginationUI(data) {
+    document.getElementById('pagination-status').textContent = `Page ${data.page} of ${data.total_pages}`;
+    document.getElementById('btn-first').disabled = data.page <= 1;
+    document.getElementById('btn-prev').disabled = data.page <= 1;
+    document.getElementById('btn-next').disabled = data.page >= data.total_pages;
+    document.getElementById('btn-last').disabled = data.page >= data.total_pages;
+}
+
+function changePage(dir) {
+    if (dir === 'first') currentPage = 1;
+    else if (dir === 'prev' && currentPage > 1) currentPage--;
+    else if (dir === 'next' && currentPage < totalPages) currentPage++;
+    else if (dir === 'last') currentPage = totalPages;
+    loadRoles();
+}
+
+function handleLimitChange() {
+    rowLimit = parseInt(document.getElementById('rows-per-page').value);
+    currentPage = 1;
+    loadRoles();
 }
 
 function initModuleUI() {
@@ -399,7 +500,6 @@ async function handleRoleSubmit(e) {
 }
 
 async function toggleRoleStatus(id, newStatus) {
-    if (!confirm(`Are you sure you want to ${newStatus === 'active' ? 'activate' : 'deactivate'} this role?`)) return;
     console.log(`Toggling Role ${id} to ${newStatus}`);
     const res = await fetch(`/api/settings/roles/${id}`, { 
         method: 'PATCH',

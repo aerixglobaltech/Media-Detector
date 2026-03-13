@@ -94,7 +94,8 @@ def init_db() -> None:
                 name        VARCHAR(100) UNIQUE NOT NULL,
                 description TEXT,
                 permissions JSONB DEFAULT '{}',
-                is_system   BOOLEAN DEFAULT FALSE
+                is_system   BOOLEAN DEFAULT FALSE,
+                status      VARCHAR(50) DEFAULT 'active'
             )
         """)
 
@@ -122,6 +123,7 @@ def init_db() -> None:
             cur.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS avatar TEXT")
             cur.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS last_login TIMESTAMP")
             cur.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP")
+            cur.execute("ALTER TABLE roles ADD COLUMN IF NOT EXISTS status VARCHAR(50) DEFAULT 'active'")
         except Exception: pass
 
         # Seed Default Roles

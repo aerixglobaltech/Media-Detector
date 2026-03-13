@@ -18,18 +18,52 @@ user_mgmt_bp = Blueprint("user_mgmt", __name__)
 @user_mgmt_bp.route("/api/settings/users", methods=["GET"])
 @login_required
 def get_users():
+    page = request.args.get("page", 1, type=int)
+    limit = request.args.get("limit", 10, type=int)
+    search = request.args.get("search", "", type=str)
+    offset = (page - 1) * limit
+
     conn = get_db_connection()
     cur = conn.cursor()
-    cur.execute("""
+    
+    query_conditions = []
+    params = []
+    
+    if search:
+        query_conditions.append("(u.name ILIKE %s OR u.email ILIKE %s OR u.company ILIKE %s)")
+        search_term = f"%{search}%"
+        params.extend([search_term, search_term, search_term])
+        
+    where_clause = ""
+    if query_conditions:
+        where_clause = "WHERE " + " AND ".join(query_conditions)
+    
+    # Get total count
+    cur.execute(f"SELECT COUNT(*) as count FROM users u {where_clause}", tuple(params))
+    row = cur.fetchone()
+    total_count = row[0] if isinstance(row, (list, tuple)) else row.get('count', 0)
+
+    # Get paginated users
+    cur.execute(f"""
         SELECT u.email, u.name, u.company, u.phone, u.status, u.avatar, u.last_login, r.name as role_name, r.id as role_id
         FROM users u
         LEFT JOIN roles r ON u.role_id = r.id
+        {where_clause}
         ORDER BY u.created_at DESC
-    """)
+        LIMIT %s OFFSET %s
+    """, tuple(params + [limit, offset]))
     users = cur.fetchall()
+    
     cur.close()
     conn.close()
-    return jsonify(users)
+    
+    return jsonify({
+        "users": users,
+        "total": total_count,
+        "page": page,
+        "limit": limit,
+        "total_pages": (total_count + limit - 1) // limit if limit > 0 else 1
+    })
 
 @user_mgmt_bp.route("/api/settings/users", methods=["POST"])
 @login_required
@@ -132,17 +166,50 @@ def delete_user(email):
 @user_mgmt_bp.route("/api/settings/roles", methods=["GET"])
 @login_required
 def get_roles():
+    page = request.args.get("page", 1, type=int)
+    limit = request.args.get("limit", 10, type=int)
+    search = request.args.get("search", "", type=str)
+    offset = (page - 1) * limit
+
     conn = get_db_connection()
     cur = conn.cursor()
-    cur.execute("""
+    
+    query_conditions = []
+    params = []
+    
+    if search:
+        query_conditions.append("name ILIKE %s")
+        params.append(f"%{search}%")
+        
+    where_clause = ""
+    if query_conditions:
+        where_clause = "WHERE " + " AND ".join(query_conditions)
+    
+    # Get total count
+    cur.execute(f"SELECT COUNT(*) as count FROM roles {where_clause}", tuple(params))
+    row = cur.fetchone()
+    total_count = row[0] if isinstance(row, (list, tuple)) else row.get('count', 0)
+
+    # Get paginated roles
+    cur.execute(f"""
         SELECT r.*, (SELECT COUNT(*) FROM users WHERE role_id = r.id) as user_count
         FROM roles r
+        {where_clause}
         ORDER BY r.id ASC
-    """)
+        LIMIT %s OFFSET %s
+    """, tuple(params + [limit, offset]))
     roles = cur.fetchall()
+    
     cur.close()
     conn.close()
-    return jsonify(roles)
+    
+    return jsonify({
+        "roles": roles,
+        "total": total_count,
+        "page": page,
+        "limit": limit,
+        "total_pages": (total_count + limit - 1) // limit if limit > 0 else 1
+    })
 
 @user_mgmt_bp.route("/api/settings/roles", methods=["POST"])
 @login_required
@@ -210,6 +277,22 @@ def update_role(role_id):
         conn = get_db_connection()
         cur = conn.cursor()
         
+        # Guard against modifying system roles
+        cur.execute("SELECT is_system, name FROM roles WHERE id = %s", (role_id,))
+        role = cur.fetchone()
+        
+        if role and role.get('is_system'):
+            if data.get("status") == "inactive":
+                cur.close()
+                conn.close()
+                return jsonify({"success": False, "error": f"System role '{role['name']}' cannot be deactivated."}), 400
+                
+            # System roles should not have their permissions, name or description changed via the UI
+            if any(k in data for k in ["permissions", "name", "description"]):
+                 cur.close()
+                 conn.close()
+                 return jsonify({"success": False, "error": f"Core attributes of system role '{role['name']}' cannot be modified."}), 400
+
         params.append(role_id)
         query = f"UPDATE roles SET {', '.join(updates)} WHERE id = %s"
         print(f"DEBUG: Executing Query: {query} with Params: {params}")

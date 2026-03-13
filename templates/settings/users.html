@@ -9,13 +9,21 @@
         <!-- Page Header -->
         <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 24px;">
             <div>
-                <a href="/settings" style="text-decoration: none; font-size: 13px; color: var(--accent); font-weight: 600;">‹ Back to Settings</a>
-                <h1 style="font-size: 24px; font-weight: 800; color: var(--text); margin: 8px 0 4px;">Users & Teams</h1>
+                {% if sys_settings.show_breadcrumbs == 'true' %}
+                <a href="/settings" style="text-decoration: none; font-size: 13px; color: var(--accent); font-weight: 600; display: block; margin-bottom: 8px;">‹ Back to Settings</a>
+                {% endif %}
+                <h1 style="font-size: 24px; font-weight: 800; color: var(--text); margin: 0 0 4px;">Users & Teams</h1>
                 <p style="font-size: 14px; color: var(--muted); margin: 0;">Manage users and their access to your organization</p>
             </div>
-            <button onclick="openCreateUserModal()" style="background: var(--accent); color: white; border: none; padding: 10px 20px; border-radius: 8px; font-weight: 600; cursor: pointer; display: flex; align-items: center; gap: 8px;">
-                <span>+</span> Add User
-            </button>
+            <div style="display: flex; gap: 12px; align-items: center;">
+                <div style="position: relative;">
+                    <svg style="position: absolute; left: 12px; top: 50%; transform: translateY(-50%); color: var(--muted); width: 16px; height: 16px; pointer-events: none;" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>
+                    <input type="text" id="user-search" placeholder="Search users by name, email, or company..." oninput="handleSearch(this.value)" style="padding: 10px 10px 10px 36px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); color: var(--text); font-size: 13px; outline: none; width: 280px; transition: border-color 0.2s;">
+                </div>
+                <button onclick="openCreateUserModal()" style="background: var(--accent); color: white; border: none; padding: 10px 20px; border-radius: 8px; font-weight: 600; cursor: pointer; display: flex; align-items: center; gap: 8px;">
+                    <span>+</span> Add User
+                </button>
+            </div>
         </div>
 
         <!-- User Table -->
@@ -35,6 +43,38 @@
                     <!-- Loaded via JS -->
                 </tbody>
             </table>
+            
+            <!-- Advanced Pagination Controls -->
+            <div id="pagination-wrapper" style="padding: 16px; border-top: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; background: var(--bg); font-family: 'Inter', sans-serif;">
+                <div id="pagination-info" style="font-size: 13px; color: var(--muted); font-weight: 500;">
+                    0 of 0 row(s) selected.
+                </div>
+                
+                <div style="display: flex; align-items: center; gap: 32px;">
+                    <!-- Rows per page -->
+                    <div style="display: flex; align-items: center; gap: 8px;">
+                        <span style="font-size: 13px; color: var(--text); font-weight: 500;">Rows per page</span>
+                        <select id="rows-per-page" onchange="handleLimitChange(this.value)" style="padding: 4px 8px; background: var(--surface); border: 1px solid var(--border); border-radius: 6px; color: var(--text); font-size: 13px; cursor: pointer; outline: none;">
+                            <option value="10">10</option>
+                            <option value="25">25</option>
+                            <option value="50">50</option>
+                        </select>
+                    </div>
+
+                    <!-- Page Info -->
+                    <div id="page-status" style="font-size: 13px; color: var(--text); font-weight: 500; min-width: 80px; text-align: center;">
+                        Page 1 of 1
+                    </div>
+
+                    <!-- Directional Buttons -->
+                    <div style="display: flex; gap: 8px;">
+                        <button class="nav-btn" onclick="changePage(1)" title="First Page" id="first-btn">«</button>
+                        <button class="nav-btn" onclick="changePage(currentPage - 1)" title="Previous Page" id="prev-btn">‹</button>
+                        <button class="nav-btn" onclick="changePage(currentPage + 1)" title="Next Page" id="next-btn">›</button>
+                        <button class="nav-btn" onclick="changePage(totalPages)" title="Last Page" id="last-btn">»</button>
+                    </div>
+                </div>
+            </div>
         </div>
     </div>
 </div>
@@ -120,21 +160,102 @@
 .dropdown-item.danger { color: #ef4444; }
 .dropdown-item.danger:hover { background: #fee2e2; }
 
+.status-btn { display: none; } /* Remove old button style if still present */
+
+/* Toggle Switch Styles */
+.switch {
+  position: relative;
+  display: inline-block;
+  width: 44px;
+  height: 24px;
+}
+.switch input { opacity: 0; width: 0; height: 0; }
+.slider {
+  position: absolute;
+  cursor: pointer;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background-color: #fca5a5; /* Inactive color */
+  transition: .4s;
+  border-radius: 24px;
+}
+.slider:before {
+  position: absolute;
+  content: "";
+  height: 18px;
+  width: 18px;
+  left: 3px;
+  bottom: 3px;
+  background-color: white;
+  transition: .4s;
+  border-radius: 50%;
+}
+input:checked + .slider { background-color: #86efac; } /* Active color */
+input:focus + .slider { box-shadow: 0 0 1px #86efac; }
+input:checked + .slider:before { transform: translateX(20px); }
+
+input:checked + .slider:before { transform: translateX(20px); }
+
+/* Navigation Buttons Styling */
+.nav-btn {
+    width: 32px;
+    height: 32px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    background: var(--surface);
+    color: var(--text);
+    cursor: pointer;
+    font-size: 18px;
+    font-weight: 400;
+    transition: all 0.2s;
+}
+.nav-btn:hover:not(:disabled) {
+    background: var(--surface2);
+    border-color: var(--accent);
+}
+.nav-btn:disabled {
+    opacity: 0.3;
+    cursor: not-allowed;
+}
+
 tr:hover { background: var(--surface2); }
 </style>
 
 <script>
 let allRoles = [];
 let currentUsers = [];
+let currentPage = 1;
+let totalPages = 1;
+let totalUsers = 0;
+let rowLimit = 10;
+let searchTerm = '';
+let searchTimeout;
 
-async function loadUsers() {
-    const res = await fetch('/api/settings/users');
-    currentUsers = await res.json();
+function handleSearch(term) {
+    clearTimeout(searchTimeout);
+    searchTimeout = setTimeout(() => {
+        searchTerm = term.trim();
+        loadUsers(1); // Reset to page 1 on search
+    }, 300); // 300ms debounce
+}
+
+async function loadUsers(page = 1) {
+    currentPage = page;
+    const res = await fetch(`/api/settings/users?page=${page}&limit=${rowLimit}&search=${encodeURIComponent(searchTerm)}`);
+    const data = await res.json();
+    currentUsers = data.users;
+    totalPages = data.total_pages;
+    totalUsers = data.total;
+    
+    updatePaginationUI();
+
     const body = document.getElementById('user-table-body');
     body.innerHTML = currentUsers.map(u => `
-        <tr style="border-bottom: 1px solid var(--border);">
+        <tr style="border-bottom: 1px solid var(--border); cursor: pointer; transition: background 0.2s;" onclick="openEditUserModal('${u.email}')" onmouseover="this.style.background='var(--surface2)'" onmouseout="this.style.background='none'">
             <td style="padding: 16px;">
-                <div style="display: flex; align-items: center; gap: 12px;">
+                <div style="display: flex; align-items: center; gap: 12px; padding: 4px; border-radius: 8px;">
                     <div style="width: 36px; height: 36px; background: var(--accent-bg); color: var(--accent); border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 13px;">
                         ${(u.name || "?").charAt(0).toUpperCase()}
                     </div>
@@ -149,17 +270,42 @@ async function loadUsers() {
             <td style="padding: 16px;"><span class="badge badge-${u.status}">${u.status}</span></td>
             <td style="padding: 16px; font-size: 12px; color: var(--muted);">${u.last_login ? new Date(u.last_login).toLocaleString([], {dateStyle:'short', timeStyle:'short'}) : 'Never'}</td>
             <td style="padding: 16px;" class="actions-cell">
-                <button class="actions-btn" onclick="toggleActions(event, '${u.email}')">⋮</button>
-                <div id="actions-${u.email.replace(/[@.]/g, '_')}" class="actions-dropdown">
-                    <div class="dropdown-item" onclick="openEditUserModal('${u.email}')"><span>✏️</span> Edit Profile</div>
-                    <div class="dropdown-item" onclick="resetPasswordFromList('${u.email}')"><span>🔑</span> Reset Password</div>
-                    <div class="dropdown-item" onclick="toggleUserStatus('${u.email}', '${u.status}')">
-                        <span>${u.status === 'active' ? '🚫' : '✅'}</span> ${u.status === 'active' ? 'Deactivate' : 'Activate'}
+                <div style="display: flex; align-items: center; justify-content: flex-end; gap: 16px;">
+                    <label class="switch" onclick="event.stopPropagation()" title="${u.status === 'active' ? 'Deactivate' : 'Activate'} User">
+                        <input type="checkbox" ${u.status === 'active' ? 'checked' : ''} onchange="toggleUserStatus('${u.email}', '${u.status}')">
+                        <span class="slider"></span>
+                    </label>
+                    <div style="position: relative;" onclick="event.stopPropagation()">
+                        <button class="actions-btn" onclick="toggleActions(event, '${u.email}')">⋮</button>
+                        <div id="actions-${u.email.replace(/[@.]/g, '_')}" class="actions-dropdown">
+                            <div class="dropdown-item" onclick="openEditUserModal('${u.email}')"><span>✏️</span> Edit Profile</div>
+                            <div class="dropdown-item" onclick="resetPasswordFromList('${u.email}')"><span>🔑</span> Reset Password</div>
+                        </div>
                     </div>
                 </div>
             </td>
         </tr>
     `).join('');
+}
+
+function updatePaginationUI() {
+    document.getElementById('pagination-info').innerText = `0 of ${totalUsers} row(s) selected.`;
+    document.getElementById('page-status').innerText = `Page ${currentPage} of ${totalPages || 1}`;
+
+    document.getElementById('first-btn').disabled = currentPage <= 1;
+    document.getElementById('prev-btn').disabled = currentPage <= 1;
+    document.getElementById('next-btn').disabled = currentPage >= totalPages;
+    document.getElementById('last-btn').disabled = currentPage >= totalPages;
+}
+
+function handleLimitChange(val) {
+    rowLimit = parseInt(val);
+    loadUsers(1);
+}
+
+function changePage(page) {
+    if (page < 1 || page > totalPages) return;
+    loadUsers(page);
 }
 
 function toggleActions(e, email) {
@@ -224,7 +370,7 @@ async function toggleUserStatus(email, currentStatus) {
         body: JSON.stringify({ status: newStatus })
     });
     const result = await res.json();
-    if (result.success) loadUsers();
+    if (result.success) loadUsers(currentPage);
 }
 
 function closeUserModal() {
@@ -262,7 +408,10 @@ async function handleUserSubmit(e) {
             body: JSON.stringify(data)
         });
         const result = await res.json();
-        if (result.success) { closeUserModal(); loadUsers(); }
+        if (result.success) { 
+            closeUserModal(); 
+            loadUsers(isEdit ? currentPage : 1); 
+        }
         else { alert("Error: " + result.error); }
     } catch (err) { alert("Network error"); }
     finally { btn.disabled = false; btn.innerText = "Save User"; }
