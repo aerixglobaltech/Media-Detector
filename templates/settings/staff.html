@@ -43,6 +43,7 @@
     <div style="margin-top:28px; display:grid; grid-template-columns:1fr 1fr; gap:30px;">
       <div style="background: var(--surface2); padding:24px; border-radius:12px; border:1px solid var(--border);">
         <h4 style="margin-bottom:16px; font-size:15px; color: var(--text);">Staff Details</h4>
+        <input type="hidden" id="staff-original-name">
         <div class="s-field"><label>Full Name *</label><input type="text" id="staff-name-input" placeholder="e.g. John Doe" /></div>
         <div class="s-field"><label>Email Address</label><input type="email" id="staff-email-input" placeholder="john@example.com" /></div>
         <div class="s-field"><label>Phone Number</label><input type="text" id="staff-phone-input" placeholder="+1 234 567 890" /></div>
@@ -109,9 +110,9 @@
 
 <script>
   document.addEventListener('DOMContentLoaded', loadSavedStaff);
-
+  
   let selectedFiles = [];
-  let currentEditStaff = "";
+  window.currentEditStaff = "";
   let allStaff = [];
 
   function handleFileSelect(event) {
@@ -145,12 +146,31 @@
     });
 
     const statusEl = document.getElementById('upload-status');
-    const isEditMode = currentEditStaff !== "";
-    const originalName = isEditMode ? currentEditStaff : "";
+    const originalNameInput = document.getElementById('staff-original-name');
+    const originalName = originalNameInput ? originalNameInput.value : "";
+    const isEditMode = originalName !== "";
+    
+    // Check if we have photos (either newly selected or already existing)
+    const hasExistingPhotos = !!document.getElementById('existing-files-preview').querySelector('img');
+    const hasSelectedFiles = selectedFiles.length > 0;
 
-    if (!nameInput) { statusEl.style.color="#ef4444"; statusEl.innerText="❌ Please provide a staff name."; return; }
-    if (!isEditMode && !selectedFiles.length) { statusEl.style.color="#ef4444"; statusEl.innerText="❌ Please select at least 1 photo."; return; }
-    statusEl.style.color="#2563eb"; statusEl.innerText= isEditMode ? "⏳ Updating profile..." : "⏳ Creating profile...";
+    if (!nameInput) { 
+      statusEl.style.color="#ef4444"; 
+      statusEl.innerText="❌ Please provide a staff name."; 
+      return; 
+    }
+    
+    // Aggressive Bypass: If we are UPDATING, don't require more photos. 
+    if (!isEditMode) {
+        if (!hasSelectedFiles && !hasExistingPhotos) {
+          statusEl.style.color="#ef4444"; 
+          statusEl.innerText="❌ Please select at least 1 photo."; 
+          return; 
+        }
+    }
+
+    statusEl.style.color="#2563eb"; 
+    statusEl.innerText= isEditMode ? "⏳ Updating profile..." : "⏳ Creating profile...";
     document.getElementById('submit-upload-btn').disabled=true;
     
     const fd = new FormData();
@@ -177,10 +197,17 @@
   }
 
   function openStaffCreate() {
-    currentEditStaff = "";
+    clearStaffForm();
+    document.getElementById('staff-original-name').value = "";
     document.getElementById('staff-form-title').innerText = "Create New Staff";
     document.getElementById('submit-upload-btn').innerText = "Create Staff Profile";
     document.getElementById('delete-profile-btn').style.display = "none";
+    document.getElementById('mod-upload').classList.remove('active');
+    document.getElementById('mod-staff-create').classList.add('active');
+  }
+
+  function clearStaffForm() {
+    selectedFiles = [];
     document.getElementById('staff-name-input').value = "";
     document.getElementById('staff-email-input').value = "";
     document.getElementById('staff-phone-input').value = "";
@@ -189,8 +216,6 @@
     document.getElementById('existing-photos-container').style.display = "none";
     document.getElementById('selected-files-preview').innerHTML = '';
     document.getElementById('upload-status').innerText = "";
-    document.getElementById('mod-upload').classList.remove('active');
-    document.getElementById('mod-staff-create').classList.add('active');
   }
   
   function closeStaffCreate() {
@@ -232,7 +257,7 @@
     const gallery = document.getElementById('saved-staff-gallery');
     if (!profiles.length) { gallery.innerHTML='<span style="color:#6b7280;">No matches found.</span>'; return; }
     gallery.innerHTML = profiles.map(p=>`
-      <div style="background: var(--bg); border:1px solid var(--border); border-radius:10px; padding:18px 14px; text-align:center; position:relative;" id="card-${p.name}">
+      <div style="background: var(--bg); border:1px solid var(--border); border-radius:10px; padding:18px 14px; text-align:center; position:relative; cursor:pointer;" id="card-${p.name}" onclick="openStaffEdit('${p.name}')">
         <button class="card-menu-btn" onclick="toggleCardDropdown(event, '${p.name}')">⋮</button>
         <div class="card-dropdown" id="dropdown-${p.name}">
           <div class="card-dropdown-item" onclick="openStaffEdit('${p.name}')"><span>👁️</span> View Profile</div>
@@ -280,22 +305,35 @@
   }
 
   async function openStaffEdit(name) {
-    currentEditStaff = name;
-    openStaffCreate();
+    clearStaffForm();
+    document.getElementById('staff-original-name').value = name;
     document.getElementById('staff-form-title').innerText = "Edit Profile";
     document.getElementById('submit-upload-btn').innerText = "Update Staff Profile";
     document.getElementById('delete-profile-btn').style.display = "block";
     document.getElementById('staff-name-input').value = name;
     document.getElementById('upload-status').innerText = "Loading details...";
+    
+    document.getElementById('mod-upload').classList.remove('active');
+    document.getElementById('mod-staff-create').classList.add('active');
+
     try {
       const res = await fetch('/api/staff_profiles/'+encodeURIComponent(name));
       const data = await res.json();
       document.getElementById('upload-status').innerText = "";
-      document.getElementById('staff-email-input').value = data.staff.email;
-      document.getElementById('staff-phone-input').value = data.staff.phone;
-      document.getElementById('staff-address-input').value = data.staff.address;
+      
+      const emailVal = (data.staff.email === null || data.staff.email === undefined || data.staff.email === "undefined") ? "" : data.staff.email;
+      const phoneVal = (data.staff.phone === null || data.staff.phone === undefined || data.staff.phone === "undefined") ? "" : data.staff.phone;
+      const addressVal = (data.staff.address === null || data.staff.address === undefined || data.staff.address === "undefined") ? "" : data.staff.address;
+
+      document.getElementById('staff-email-input').value = emailVal;
+      document.getElementById('staff-phone-input').value = phoneVal;
+      document.getElementById('staff-address-input').value = addressVal;
+
       if (data.staff.communication) {
-        const comms = JSON.parse(data.staff.communication);
+        let comms = [];
+        try {
+          comms = typeof data.staff.communication === 'string' ? JSON.parse(data.staff.communication) : data.staff.communication;
+        } catch(e) { comms = []; }
         if (Array.isArray(comms)) comms.forEach(c => addCommGroup(c));
       }
       if (data.photos && data.photos.length > 0) {
@@ -303,21 +341,25 @@
         document.getElementById('existing-files-preview').innerHTML = data.photos.map(p=>`
           <div style="position:relative; display:inline-block; width:60px; height:60px; border-radius:8px; overflow:hidden; border:1px solid #e5e7eb; margin:0 10px 10px 0;">
             <img src="${p.url}" style="width:100%; height:100%; object-fit:cover;">
-            <button type="button" onclick="deleteStaffPhoto('${p.filename}')" style="position:absolute; bottom:0; left:0; width:100%; background:rgba(239,68,68,0.9); color:white; border:none; font-size:10px; cursor:pointer;">DEL</button>
+            <button type="button" onclick="deleteStaffPhoto('${p.filename}')" style="position:absolute; top:4px; right:4px; width:20px; height:20px; background:rgba(239,68,68,0.9); color:white; border:none; border-radius:50%; font-size:12px; display:flex; align-items:center; justify-content:center; cursor:pointer; padding:0; z-index:5;">✕</button>
           </div>`).join('');
       }
-    } catch (e) {}
+    } catch (e) {
+      document.getElementById('upload-status').innerText = "❌ Error loading info";
+    }
   }
 
   async function deleteStaffPhoto(filename) {
+    const original = document.getElementById('staff-original-name').value;
     if (!confirm('Delete this photo?')) return;
-    const res = await fetch('/api/staff_profiles/'+encodeURIComponent(currentEditStaff)+'/'+encodeURIComponent(filename), {method:'DELETE'});
-    if ((await res.json()).success) openStaffEdit(currentEditStaff);
+    const res = await fetch('/api/staff_profiles/'+encodeURIComponent(original)+'/'+encodeURIComponent(filename), {method:'DELETE'});
+    if ((await res.json()).success) openStaffEdit(original);
   }
 
   async function deleteStaffProfile() {
+    const original = document.getElementById('staff-original-name').value;
     if (!confirm('Delete entire profile?')) return;
-    const res = await fetch('/api/staff_profiles/'+encodeURIComponent(currentEditStaff), {method:'DELETE'});
+    const res = await fetch('/api/staff_profiles/'+encodeURIComponent(original), {method:'DELETE'});
     if ((await res.json()).success) { closeStaffCreate(); loadSavedStaff(); }
   }
 </script>

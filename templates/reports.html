@@ -13,12 +13,76 @@
     <p style="font-size:13px; color: var(--muted); margin:0;">Generate and export system activity reports</p>
   </div>
 
-  <div style="border: 1px dashed var(--border); border-radius: 12px; padding: 60px; text-align: center; color: var(--muted);">
-    <div style="font-size: 48px; margin-bottom: 16px;">⏳</div>
-    <h3 style="color: var(--text); font-size: 18px; font-weight: 700;">Under Development</h3>
-    <p style="font-size: 14px; margin-top: 8px;">The Reports module is being prepared and will be available soon.</p>
+  <div style="margin-top: 40px;">
+    <h2 style="font-size:16px; font-weight:700; color: var(--text); margin-bottom:20px;">Quick Reports</h2>
+    <div style="display:grid; grid-template-columns: repeat(3, 1fr); gap:20px;">
+      
+      <!-- TODAY -->
+      <div onclick="generateQuickReport('today')" style="background: var(--bg); border:1px solid var(--border); border-radius:12px; padding:24px; text-align:center; cursor:pointer; transition:all 0.2s;" onmouseover="this.style.borderColor='var(--accent)'; this.style.transform='translateY(-4px)'; this.style.boxShadow='var(--shadow-md)'" onmouseout="this.style.borderColor='var(--border)'; this.style.transform='translateY(0)'; this.style.boxShadow='none'">
+        <div style="font-size:32px; margin-bottom:12px;">🕒</div>
+        <div style="font-size:15px; font-weight:700; color: var(--text);">Today</div>
+        <p style="font-size:12px; color: var(--muted); margin-top:4px;">Last 24 hours activity</p>
+      </div>
+
+      <!-- THIS WEEK -->
+      <div onclick="generateQuickReport('week')" style="background: var(--bg); border:1px solid var(--border); border-radius:12px; padding:24px; text-align:center; cursor:pointer; transition:all 0.2s;" onmouseover="this.style.borderColor='var(--accent)'; this.style.transform='translateY(-4px)'; this.style.boxShadow='var(--shadow-md)'" onmouseout="this.style.borderColor='var(--border)'; this.style.transform='translateY(0)'; this.style.boxShadow='none'">
+        <div style="font-size:32px; margin-bottom:12px;">📅</div>
+        <div style="font-size:15px; font-weight:700; color: var(--text);">This Week</div>
+        <p style="font-size:12px; color: var(--muted); margin-top:4px;">Last 7 days summaries</p>
+      </div>
+
+      <!-- THIS MONTH -->
+      <div onclick="generateQuickReport('month')" style="background: var(--bg); border:1px solid var(--border); border-radius:12px; padding:24px; text-align:center; cursor:pointer; transition:all 0.2s;" onmouseover="this.style.borderColor='var(--accent)'; this.style.transform='translateY(-4px)'; this.style.boxShadow='var(--shadow-md)'" onmouseout="this.style.borderColor='var(--border)'; this.style.transform='translateY(0)'; this.style.boxShadow='none'">
+        <div style="font-size:32px; margin-bottom:12px;">📈</div>
+        <div style="font-size:15px; font-weight:700; color: var(--text);">This Month</div>
+        <p style="font-size:12px; color: var(--muted); margin-top:4px;">Full monthly analysis</p>
+      </div>
+
+    </div>
+  </div>
+
+  <div id="report-output" style="margin-top:40px; border: 1px dashed var(--border); border-radius: 12px; padding: 60px; text-align: center; color: var(--muted);">
+    <div style="font-size: 48px; margin-bottom: 16px;">🔍</div>
+    <h3 style="color: var(--text); font-size: 18px; font-weight: 700;">Select a Range</h3>
+    <p style="font-size: 14px; margin-top: 8px;">Click on a card above to generate a quick report for that period.</p>
   </div>
 
 </div>
 </div>
+
+<script>
+  function generateQuickReport(range) {
+    const output = document.getElementById('report-output');
+    output.style.color = 'var(--text)';
+    output.style.borderStyle = 'solid';
+    output.innerHTML = `
+      <div style="font-size:32px; margin-bottom:16px;">📊</div>
+      <h3 style="font-size:20px; font-weight:800; margin-bottom:12px;">Generating ${range.toUpperCase()} Report...</h3>
+      <div style="max-width:300px; height:8px; background:var(--surface2); border-radius:4px; margin:20px auto; overflow:hidden;">
+        <div style="width:60%; height:100%; background:var(--accent); border-radius:4px;"></div>
+      </div>
+      <p style="font-size:14px; color: var(--muted);">Connecting to data engine. Please wait...</p>
+    `;
+    
+    // Simulate generation
+    setTimeout(() => {
+      output.innerHTML = `
+        <div style="text-align:left;">
+          <h3 style="font-size:18px; font-weight:800; margin-bottom:20px; color:var(--text);">Report: ${range === 'today' ? 'Daily Summary' : (range === 'week' ? 'Weekly Analytics' : 'Monthly Performance')}</h3>
+          <div style="display:grid; grid-template-columns: 1fr 1fr; gap:20px;">
+            <div style="padding:16px; background:var(--surface2); border-radius:10px;">
+              <div style="font-size:11px; text-transform:uppercase; color:var(--muted); font-weight:700;">Detections</div>
+              <div style="font-size:24px; font-weight:800; color:var(--accent); margin-top:4px;">124</div>
+            </div>
+            <div style="padding:16px; background:var(--surface2); border-radius:10px;">
+              <div style="font-size:11px; text-transform:uppercase; color:var(--muted); font-weight:700;">Alerts</div>
+              <div style="font-size:24px; font-weight:800; color:var(--red); margin-top:4px;">12</div>
+            </div>
+          </div>
+          <button style="margin-top:24px; background:var(--accent); color:white; border:none; padding:10px 20px; border-radius:8px; font-size:13px; font-weight:700; cursor:pointer;">📥 Download PDF Report</button>
+        </div>
+      `;
+    }, 1500);
+  }
+</script>
 {% endblock %}
