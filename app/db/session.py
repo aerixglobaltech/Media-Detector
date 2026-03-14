@@ -209,6 +209,74 @@ def init_db() -> None:
             )
         """)
 
+        # Telegram Users Table (bot registration: phone -> chat_id)
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS telegram_users (
+                id SERIAL PRIMARY KEY,
+                phone_number VARCHAR(30) UNIQUE NOT NULL,
+                chat_id BIGINT NOT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+
+        # Attendance Table
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS attendance (
+                id SERIAL PRIMARY KEY,
+                staff_id INTEGER NOT NULL REFERENCES staff_profiles(id) ON DELETE RESTRICT,
+                status VARCHAR(10) NOT NULL CHECK (status IN ('IN', 'OUT')),
+                in_time TIMESTAMP,
+                out_time TIMESTAMP,
+                timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+
+        # Backward-compatible schema alignment for existing attendance tables
+        try:
+            cur.execute("ALTER TABLE attendance ADD COLUMN IF NOT EXISTS staff_id INTEGER REFERENCES staff_profiles(id) ON DELETE RESTRICT")
+            cur.execute("ALTER TABLE attendance ADD COLUMN IF NOT EXISTS status VARCHAR(10)")
+            cur.execute("ALTER TABLE attendance ADD COLUMN IF NOT EXISTS in_time TIMESTAMP")
+            cur.execute("ALTER TABLE attendance ADD COLUMN IF NOT EXISTS out_time TIMESTAMP")
+            cur.execute("ALTER TABLE attendance ADD COLUMN IF NOT EXISTS timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP")
+        except Exception:
+            pass
+
+        # Helpful lookup index for attendance notifications
+        cur.execute("CREATE INDEX IF NOT EXISTS idx_telegram_users_phone_number ON telegram_users(phone_number)")
+        cur.execute("CREATE INDEX IF NOT EXISTS idx_attendance_staff_time ON attendance(staff_id, timestamp)")
+
+        # Seed sample attendance rows from staff profiles (first-time bootstrap)
+        cur.execute("""
+            WITH staff_pool AS (
+                SELECT
+                    id,
+                    ROW_NUMBER() OVER (ORDER BY id) AS rn,
+                    COUNT(*) OVER () AS total_staff
+                FROM staff_profiles
+            ),
+            slots AS (
+                SELECT generate_series(1, 10) AS n
+            ),
+            picked_staff AS (
+                SELECT
+                    sp.id AS staff_id,
+                    s.n
+                FROM slots s
+                JOIN staff_pool sp
+                  ON sp.rn = ((s.n - 1) % sp.total_staff) + 1
+            )
+            INSERT INTO attendance (staff_id, status, in_time, out_time, timestamp)
+            SELECT
+                p.staff_id,
+                'OUT',
+                CURRENT_TIMESTAMP - ((11 - p.n) * INTERVAL '9 hours'),
+                CURRENT_TIMESTAMP - ((11 - p.n) * INTERVAL '9 hours') + INTERVAL '8 hours 15 minutes',
+                CURRENT_TIMESTAMP - ((11 - p.n) * INTERVAL '9 hours')
+            FROM picked_staff p
+            WHERE EXISTS (SELECT 1 FROM staff_profiles)
+              AND NOT EXISTS (SELECT 1 FROM attendance)
+        """)
+
         # Migrate existing settings to telegram_bots if first time
         cur.execute("SELECT COUNT(*) FROM telegram_bots")
         if cur.fetchone()['count'] == 0:

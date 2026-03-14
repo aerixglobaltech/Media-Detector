@@ -819,3 +819,212 @@ def api_staff_export():
         log.error("Error during staff export: %s", e)
         return f"Export Error: {str(e)}", 500
 
+
+@api_bp.route("/api/attendance/records", methods=["GET"])
+@login_required
+def api_attendance_records():
+    """Return attendance records (joined with staff) with filters and summary."""
+    status = (request.args.get("status") or "").strip().upper()
+    q = (request.args.get("q") or "").strip()
+    date_from = (request.args.get("date_from") or "").strip()
+    date_to = (request.args.get("date_to") or "").strip()
+    try:
+        page = int(request.args.get("page", 1))
+    except Exception:
+        page = 1
+    try:
+        page_size = int(request.args.get("page_size", 10))
+    except Exception:
+        page_size = 10
+    page = max(1, page)
+    page_size = max(1, min(page_size, 100))
+    offset = (page - 1) * page_size
+
+    where = []
+    params = []
+
+    if status in {"IN", "OUT"}:
+        where.append("a.status = %s")
+        params.append(status)
+    if date_from:
+        where.append("a.timestamp::date >= %s::date")
+        params.append(date_from)
+    if date_to:
+        where.append("a.timestamp::date <= %s::date")
+        params.append(date_to)
+    if q:
+        like = f"%{q}%"
+        where.append(
+            "(COALESCE(s.name,'') ILIKE %s OR COALESCE(s.email,'') ILIKE %s OR COALESCE(s.phone,'') ILIKE %s)"
+        )
+        params.extend([like, like, like])
+
+    where_sql = f"WHERE {' AND '.join(where)}" if where else ""
+
+    conn = None
+    try:
+        conn = get_db_connection()
+        cur = conn.cursor()
+        cur.execute(
+            f"""
+            SELECT COUNT(*)::int AS total_records
+            FROM attendance a
+            LEFT JOIN staff_profiles s ON s.id = a.staff_id
+            {where_sql}
+            """,
+            tuple(params),
+        )
+        count_row = cur.fetchone() or {}
+        total_records = count_row.get("total_records", 0) or 0
+
+        cur.execute(
+            f"""
+            SELECT
+                a.id,
+                a.staff_id,
+                COALESCE(s.name, '-') AS name,
+                COALESCE(s.email, '') AS email,
+                COALESCE(s.phone, '') AS phone,
+                a.status,
+                a.in_time,
+                a.out_time,
+                a.timestamp
+            FROM attendance a
+            LEFT JOIN staff_profiles s ON s.id = a.staff_id
+            {where_sql}
+            ORDER BY a.timestamp DESC
+            LIMIT %s OFFSET %s
+            """,
+            tuple(params + [page_size, offset]),
+        )
+        rows = cur.fetchall()
+
+        cur.execute(
+            f"""
+            SELECT
+                COUNT(*)::int AS total_records,
+                SUM(CASE WHEN a.status = 'IN' THEN 1 ELSE 0 END)::int AS total_in,
+                SUM(CASE WHEN a.status = 'OUT' THEN 1 ELSE 0 END)::int AS total_out,
+                SUM(CASE WHEN a.timestamp::date = CURRENT_DATE THEN 1 ELSE 0 END)::int AS today_total
+            FROM attendance a
+            LEFT JOIN staff_profiles s ON s.id = a.staff_id
+            {where_sql}
+            """,
+            tuple(params),
+        )
+        summary = cur.fetchone() or {}
+
+        return jsonify(
+            {
+                "success": True,
+                "records": rows,
+                "summary": {
+                    "total_records": summary.get("total_records", 0) or 0,
+                    "total_in": summary.get("total_in", 0) or 0,
+                    "total_out": summary.get("total_out", 0) or 0,
+                    "today_total": summary.get("today_total", 0) or 0,
+                },
+                "pagination": {
+                    "page": page,
+                    "page_size": page_size,
+                    "total_records": total_records,
+                    "total_pages": (total_records + page_size - 1) // page_size if total_records else 0,
+                },
+            }
+        )
+    except Exception as e:
+        log.error("Error loading attendance records: %s", e)
+        return jsonify({"success": False, "error": str(e)}), 500
+    finally:
+        if conn:
+            conn.close()
+
+
+@api_bp.route("/api/attendance/export", methods=["GET"])
+@login_required
+def api_attendance_export():
+    """Export filtered attendance records to CSV or Excel."""
+    fmt = (request.args.get("format") or "excel").strip().lower()
+    status = (request.args.get("status") or "").strip().upper()
+    q = (request.args.get("q") or "").strip()
+    date_from = (request.args.get("date_from") or "").strip()
+    date_to = (request.args.get("date_to") or "").strip()
+
+    where = []
+    params = []
+    if status in {"IN", "OUT"}:
+        where.append("a.status = %s")
+        params.append(status)
+    if date_from:
+        where.append("a.timestamp::date >= %s::date")
+        params.append(date_from)
+    if date_to:
+        where.append("a.timestamp::date <= %s::date")
+        params.append(date_to)
+    if q:
+        like = f"%{q}%"
+        where.append("(COALESCE(s.name,'') ILIKE %s OR COALESCE(s.email,'') ILIKE %s OR COALESCE(s.phone,'') ILIKE %s)")
+        params.extend([like, like, like])
+
+    where_sql = f"WHERE {' AND '.join(where)}" if where else ""
+    conn = None
+    try:
+        conn = get_db_connection()
+        cur = conn.cursor()
+        cur.execute(
+            f"""
+            SELECT
+                COALESCE(s.name, '-') AS name,
+                COALESCE(s.email, '') AS email,
+                COALESCE(s.phone, '') AS phone,
+                a.status,
+                a.in_time,
+                a.out_time,
+                a.timestamp
+            FROM attendance a
+            LEFT JOIN staff_profiles s ON s.id = a.staff_id
+            {where_sql}
+            ORDER BY a.timestamp DESC
+            """,
+            tuple(params),
+        )
+        rows = cur.fetchall()
+        cur.close()
+        conn.close()
+
+        if fmt == "csv":
+            import csv
+            import io
+            from flask import Response
+
+            output = io.StringIO()
+            writer = csv.writer(output)
+            writer.writerow(["name", "email", "phone", "status", "in_time", "out_time", "timestamp"])
+            for r in rows:
+                writer.writerow([r["name"], r["email"], r["phone"], r["status"], r["in_time"], r["out_time"], r["timestamp"]])
+            return Response(
+                output.getvalue(),
+                mimetype="text/csv",
+                headers={"Content-disposition": "attachment; filename=attendance_records.csv"},
+            )
+
+        import io
+        import pandas as pd
+        from flask import Response
+
+        df = pd.DataFrame(rows)
+        if not df.empty:
+            df.columns = ["Name", "Email", "Phone", "Status", "IN Time", "OUT Time", "Recorded At"]
+        output = io.BytesIO()
+        with pd.ExcelWriter(output, engine="openpyxl") as writer:
+            df.to_excel(writer, index=False, sheet_name="Attendance")
+
+        return Response(
+            output.getvalue(),
+            mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            headers={"Content-disposition": "attachment; filename=attendance_records.xlsx"},
+        )
+    except Exception as e:
+        log.error("Error exporting attendance records: %s", e)
+        return jsonify({"success": False, "error": str(e)}), 500
+

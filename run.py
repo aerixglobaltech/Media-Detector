@@ -53,7 +53,7 @@ if __name__ == "__main__":
 
     if dev_mode:
         log.info("Starting in DEVELOPMENT mode on http://localhost:%d", port)
-        flask_app.run(host="0.0.0.0", port=port, debug=True, use_reloader=False)
+        flask_app.run(host="0.0.0.0", port=port, debug=True, use_reloader=True)
     else:
         try:
             from waitress import serve

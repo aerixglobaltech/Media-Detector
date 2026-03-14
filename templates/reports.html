@@ -5,84 +5,310 @@
 <div style="height: calc(100vh - 53px); overflow-y: auto; background: var(--bg); padding: 28px;">
 <div style="background: var(--surface); border-radius: 14px; border: 1px solid var(--border); box-shadow: var(--shadow-sm); padding: 32px 40px; min-height: calc(100vh - 53px - 56px);">
 
-  <div style="margin-bottom: 24px;">
-    <div style="display:flex; align-items:center; gap:12px; margin-bottom:6px;">
-      <span style="font-size:24px;">📋</span>
-      <h1 style="font-size:22px; font-weight:800; color: var(--text); margin:0;">Reports</h1>
+  <div style="margin-bottom: 24px; display:flex; align-items:flex-start; justify-content:space-between; gap:12px;">
+    <div>
+      <div style="display:flex; align-items:center; gap:12px; margin-bottom:6px;">
+        <span style="font-size:24px;">📋</span>
+        <h1 style="font-size:22px; font-weight:800; color: var(--text); margin:0;">Reports</h1>
+      </div>
+      <p style="font-size:13px; color: var(--muted); margin:0;">Generate and export system activity reports</p>
     </div>
-    <p style="font-size:13px; color: var(--muted); margin:0;">Generate and export system activity reports</p>
+    <a id="report-export-link" href="/api/attendance/export?format=excel" style="background:var(--accent); color:white; text-decoration:none; border:none; padding:10px 14px; border-radius:9px; font-size:12px; font-weight:700; cursor:pointer;">Export</a>
   </div>
 
-  <div style="margin-top: 40px;">
-    <h2 style="font-size:16px; font-weight:700; color: var(--text); margin-bottom:20px;">Quick Reports</h2>
-    <div style="display:grid; grid-template-columns: repeat(3, 1fr); gap:20px;">
-      
-      <!-- TODAY -->
-      <div onclick="generateQuickReport('today')" style="background: var(--bg); border:1px solid var(--border); border-radius:12px; padding:24px; text-align:center; cursor:pointer; transition:all 0.2s;" onmouseover="this.style.borderColor='var(--accent)'; this.style.transform='translateY(-4px)'; this.style.boxShadow='var(--shadow-md)'" onmouseout="this.style.borderColor='var(--border)'; this.style.transform='translateY(0)'; this.style.boxShadow='none'">
-        <div style="font-size:32px; margin-bottom:12px;">🕒</div>
-        <div style="font-size:15px; font-weight:700; color: var(--text);">Today</div>
-        <p style="font-size:12px; color: var(--muted); margin-top:4px;">Last 24 hours activity</p>
-      </div>
-
-      <!-- THIS WEEK -->
-      <div onclick="generateQuickReport('week')" style="background: var(--bg); border:1px solid var(--border); border-radius:12px; padding:24px; text-align:center; cursor:pointer; transition:all 0.2s;" onmouseover="this.style.borderColor='var(--accent)'; this.style.transform='translateY(-4px)'; this.style.boxShadow='var(--shadow-md)'" onmouseout="this.style.borderColor='var(--border)'; this.style.transform='translateY(0)'; this.style.boxShadow='none'">
-        <div style="font-size:32px; margin-bottom:12px;">📅</div>
-        <div style="font-size:15px; font-weight:700; color: var(--text);">This Week</div>
-        <p style="font-size:12px; color: var(--muted); margin-top:4px;">Last 7 days summaries</p>
-      </div>
-
-      <!-- THIS MONTH -->
-      <div onclick="generateQuickReport('month')" style="background: var(--bg); border:1px solid var(--border); border-radius:12px; padding:24px; text-align:center; cursor:pointer; transition:all 0.2s;" onmouseover="this.style.borderColor='var(--accent)'; this.style.transform='translateY(-4px)'; this.style.boxShadow='var(--shadow-md)'" onmouseout="this.style.borderColor='var(--border)'; this.style.transform='translateY(0)'; this.style.boxShadow='none'">
-        <div style="font-size:32px; margin-bottom:12px;">📈</div>
-        <div style="font-size:15px; font-weight:700; color: var(--text);">This Month</div>
-        <p style="font-size:12px; color: var(--muted); margin-top:4px;">Full monthly analysis</p>
-      </div>
-
-    </div>
-  </div>
-
-  <div id="report-output" style="margin-top:40px; border: 1px dashed var(--border); border-radius: 12px; padding: 60px; text-align: center; color: var(--muted);">
-    <div style="font-size: 48px; margin-bottom: 16px;">🔍</div>
-    <h3 style="color: var(--text); font-size: 18px; font-weight: 700;">Select a Range</h3>
-    <p style="font-size: 14px; margin-top: 8px;">Click on a card above to generate a quick report for that period.</p>
+  <div id="report-output" style="margin-top:24px; border: 1px dashed var(--border); border-radius: 12px; padding: 40px; text-align: center; color: var(--muted);">
+    <div style="font-size: 32px; margin-bottom: 12px;">📊</div>
+    <h3 style="color: var(--text); font-size: 18px; font-weight: 700;">Loading attendance analytics...</h3>
   </div>
 
 </div>
 </div>
 
 <script>
-  function generateQuickReport(range) {
+  const reportFilter = {
+    mode: 'all',
+    date_from: '',
+    date_to: ''
+  };
+
+  function toYmd(d) {
+    const yyyy = d.getFullYear();
+    const mm = String(d.getMonth() + 1).padStart(2, '0');
+    const dd = String(d.getDate()).padStart(2, '0');
+    return `${yyyy}-${mm}-${dd}`;
+  }
+
+  function fmtChange(value) {
+    const n = Number.isFinite(value) ? value : 0;
+    if (n > 0) return `+${n}%`;
+    return `${n}%`;
+  }
+
+  function clamp(value, min, max) {
+    return Math.max(min, Math.min(max, value));
+  }
+
+  function getFilterDateParams() {
+    const now = new Date();
+    if (reportFilter.mode === 'today') {
+      const day = toYmd(now);
+      return { date_from: day, date_to: day };
+    }
+    if (reportFilter.mode === 'week') {
+      const start = new Date(now);
+      start.setDate(now.getDate() - 6);
+      return { date_from: toYmd(start), date_to: toYmd(now) };
+    }
+    if (reportFilter.mode === 'month') {
+      const start = new Date(now);
+      start.setDate(now.getDate() - 29);
+      return { date_from: toYmd(start), date_to: toYmd(now) };
+    }
+    if (reportFilter.mode === 'custom' && reportFilter.date_from && reportFilter.date_to) {
+      return { date_from: reportFilter.date_from, date_to: reportFilter.date_to };
+    }
+    return {};
+  }
+
+  function buildFilterQueryParams() {
+    const qs = new URLSearchParams({ page: '1', page_size: '500' });
+    const dateParams = getFilterDateParams();
+    if (dateParams.date_from) qs.set('date_from', dateParams.date_from);
+    if (dateParams.date_to) qs.set('date_to', dateParams.date_to);
+    return qs;
+  }
+
+  function syncExportLink() {
+    const exportLink = document.getElementById('report-export-link');
+    if (!exportLink) return;
+    const dateParams = getFilterDateParams();
+    const qs = new URLSearchParams({ format: 'excel' });
+    if (dateParams.date_from) qs.set('date_from', dateParams.date_from);
+    if (dateParams.date_to) qs.set('date_to', dateParams.date_to);
+    exportLink.href = '/api/attendance/export?' + qs.toString();
+  }
+
+  function chipStyle(mode) {
+    const active = reportFilter.mode === mode;
+    return active
+      ? 'background:var(--surface); color:var(--text); border:1px solid var(--border);'
+      : 'background:transparent; color:var(--muted); border:1px solid transparent;';
+  }
+
+  function renderAttendanceReport(data) {
+    const output = document.getElementById('report-output');
+    const s = data.summary || {};
+    const rows = data.records || [];
+    const total = Number(s.total_records || 0);
+    const totalIn = Number(s.total_in || 0);
+    const totalOut = Number(s.total_out || 0);
+    const inPct = total ? Math.round((totalIn / total) * 100) : 0;
+    const outPct = total ? Math.round((totalOut / total) * 100) : 0;
+
+    const bucket = {};
+    rows.forEach((r) => {
+      const raw = r.timestamp || r.in_time || r.out_time;
+      if (!raw) return;
+      const d = new Date(raw);
+      if (Number.isNaN(d.getTime())) return;
+      const key = toYmd(d);
+      if (!bucket[key]) bucket[key] = { in: 0, out: 0 };
+      if ((r.status || '').toUpperCase() === 'IN') bucket[key].in += 1;
+      if ((r.status || '').toUpperCase() === 'OUT') bucket[key].out += 1;
+    });
+    const trendKeys = Object.keys(bucket).sort().slice(-7);
+    const trendData = trendKeys.map((k) => ({ date: k, total: bucket[k].in + bucket[k].out }));
+    const maxTrend = trendData.length ? Math.max(...trendData.map((d) => d.total), 1) : 1;
+    const avgDaily = trendData.length ? (trendData.reduce((sum, d) => sum + d.total, 0) / trendData.length).toFixed(1) : '0.0';
+
+    const memberCount = {};
+    rows.forEach((r) => {
+      const key = (r.name || 'Unknown').trim() || 'Unknown';
+      memberCount[key] = (memberCount[key] || 0) + 1;
+    });
+    const topMembers = Object.entries(memberCount)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 5);
+    const uniqueMembers = Object.keys(memberCount).length;
+    const peakDay = trendData.length
+      ? trendData.reduce((m, d) => (d.total > m.total ? d : m), trendData[0])
+      : null;
+
+    const now = new Date();
+    const currentStart = new Date(now);
+    currentStart.setDate(now.getDate() - 6);
+    const prevStart = new Date(now);
+    prevStart.setDate(now.getDate() - 13);
+    const prevEnd = new Date(now);
+    prevEnd.setDate(now.getDate() - 7);
+
+    let currentWeekCount = 0;
+    let prevWeekCount = 0;
+    rows.forEach((r) => {
+      const raw = r.timestamp || r.in_time || r.out_time;
+      if (!raw) return;
+      const d = new Date(raw);
+      if (Number.isNaN(d.getTime())) return;
+      if (d >= currentStart && d <= now) currentWeekCount += 1;
+      else if (d >= prevStart && d <= prevEnd) prevWeekCount += 1;
+    });
+    const weekChange = prevWeekCount
+      ? Math.round(((currentWeekCount - prevWeekCount) / prevWeekCount) * 100)
+      : (currentWeekCount > 0 ? 100 : 0);
+    const ringIn = clamp(inPct, 0, 100);
+    const ringOut = clamp(outPct, 0, 100);
+
+    output.innerHTML = `
+      <div style="text-align:left;">
+        <div style="display:flex; justify-content:space-between; align-items:center; gap:10px; margin-bottom:14px; flex-wrap:wrap;">
+          <div style="display:flex; align-items:center; gap:4px; padding:4px; border:1px solid var(--border); border-radius:10px; background:var(--surface2);">
+            <button onclick="setReportRange('all')" style="${chipStyle('all')} padding:7px 12px; border-radius:8px; font-size:12px; font-weight:700; cursor:pointer;">All</button>
+            <button onclick="setReportRange('today')" style="${chipStyle('today')} padding:7px 12px; border-radius:8px; font-size:12px; font-weight:700; cursor:pointer;">Today</button>
+            <button onclick="setReportRange('week')" style="${chipStyle('week')} padding:7px 12px; border-radius:8px; font-size:12px; font-weight:700; cursor:pointer;">This Week</button>
+            <button onclick="setReportRange('month')" style="${chipStyle('month')} padding:7px 12px; border-radius:8px; font-size:12px; font-weight:700; cursor:pointer;">This Month</button>
+            <button onclick="setReportRange('custom')" style="${chipStyle('custom')} padding:7px 12px; border-radius:8px; font-size:12px; font-weight:700; cursor:pointer;">Select Period</button>
+          </div>
+          ${reportFilter.mode === 'custom' ? `
+            <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
+              <input id="report-date-from" type="date" value="${reportFilter.date_from || ''}" style="height:34px; border:1px solid var(--border); border-radius:8px; padding:0 10px; background:var(--surface); color:var(--text); font-size:12px;">
+              <input id="report-date-to" type="date" value="${reportFilter.date_to || ''}" style="height:34px; border:1px solid var(--border); border-radius:8px; padding:0 10px; background:var(--surface); color:var(--text); font-size:12px;">
+              <button onclick="applyCustomReportRange()" style="height:34px; border:none; border-radius:8px; padding:0 12px; background:var(--accent); color:#fff; font-size:12px; font-weight:700; cursor:pointer;">Apply</button>
+            </div>
+          ` : `<div style="font-size:12px; color:var(--muted); font-weight:600;">Showing ${reportFilter.mode === 'all' ? 'all records' : reportFilter.mode}</div>`}
+        </div>
+        <div style="display:grid; grid-template-columns: repeat(4, minmax(140px,1fr)); gap:12px; margin-bottom:16px;">
+          <div style="padding:14px; background:linear-gradient(135deg, rgba(87,121,255,0.18), rgba(87,121,255,0.06)); border:1px solid var(--border); border-radius:12px;">
+            <div style="font-size:11px; color:var(--muted); text-transform:uppercase; font-weight:700;">Total Logs</div>
+            <div style="font-size:24px; font-weight:800; color:var(--text);">${s.total_records || 0}</div>
+            <div style="font-size:11px; color:var(--muted); margin-top:3px;">All attendance events</div>
+          </div>
+          <div style="padding:14px; background:linear-gradient(135deg, rgba(48,191,128,0.18), rgba(48,191,128,0.05)); border:1px solid var(--border); border-radius:12px;">
+            <div style="font-size:11px; color:var(--muted); text-transform:uppercase; font-weight:700;">IN Entries</div>
+            <div style="font-size:24px; font-weight:800; color:var(--green);">${s.total_in || 0}</div>
+            <div style="font-size:11px; color:var(--muted); margin-top:3px;">${inPct}% of total</div>
+          </div>
+          <div style="padding:14px; background:linear-gradient(135deg, rgba(246,166,77,0.18), rgba(246,166,77,0.05)); border:1px solid var(--border); border-radius:12px;">
+            <div style="font-size:11px; color:var(--muted); text-transform:uppercase; font-weight:700;">OUT Entries</div>
+            <div style="font-size:24px; font-weight:800; color:var(--text);">${s.total_out || 0}</div>
+            <div style="font-size:11px; color:var(--muted); margin-top:3px;">${outPct}% of total</div>
+          </div>
+          <div style="padding:14px; background:linear-gradient(135deg, rgba(145,99,255,0.18), rgba(145,99,255,0.05)); border:1px solid var(--border); border-radius:12px;">
+            <div style="font-size:11px; color:var(--muted); text-transform:uppercase; font-weight:700;">Week Trend</div>
+            <div style="font-size:24px; font-weight:800; color:var(--accent);">${fmtChange(weekChange)}</div>
+            <div style="font-size:11px; color:var(--muted); margin-top:3px;">vs previous week</div>
+          </div>
+        </div>
+        <div style="display:grid; grid-template-columns: 1.4fr 1fr; gap:14px;">
+          <div style="border:1px solid var(--border); border-radius:12px; padding:14px; background:var(--surface);">
+            <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:12px;">
+              <div style="font-size:12px; color:var(--muted); font-weight:700; text-transform:uppercase;">Recent Activity Trend</div>
+              <div style="font-size:11px; color:var(--muted);">${trendData.length} day points</div>
+            </div>
+            <div style="display:flex; flex-direction:column; gap:8px; max-height:180px; overflow:auto; padding-right:4px;">
+              ${trendData.length ? trendData.map((t, idx) => `
+                <div style="display:grid; grid-template-columns:56px 1fr auto; align-items:center; gap:10px; padding:7px 8px; border:1px solid var(--border); border-radius:10px; background:${idx === trendData.length - 1 ? 'rgba(111,137,255,.08)' : 'var(--surface2)'};">
+                  <div style="font-size:11px; color:var(--muted); font-weight:700;">${t.date.slice(5)}</div>
+                  <div style="height:8px; background:rgba(111,137,255,.12); border-radius:999px; overflow:hidden;">
+                    <div style="width:${Math.max(6, Math.round((t.total / maxTrend) * 100))}%; height:100%; border-radius:999px; background:linear-gradient(90deg, #6f89ff, #8e66ff);"></div>
+                  </div>
+                  <div style="font-size:11px; color:var(--text); font-weight:800; min-width:28px; text-align:right;">${t.total}</div>
+                </div>
+              `).join('') : '<div style="font-size:13px; color:var(--muted);">No trend data available.</div>'}
+            </div>
+            <div style="display:flex; gap:16px; margin-top:12px; font-size:12px; color:var(--muted);">
+              <span>Avg/day: <strong style="color:var(--text);">${avgDaily}</strong></span>
+              <span>Peak: <strong style="color:var(--text);">${peakDay ? `${peakDay.total} (${peakDay.date})` : '-'}</strong></span>
+            </div>
+          </div>
+          <div style="border:1px solid var(--border); border-radius:12px; padding:14px; background:var(--surface);">
+            <div style="font-size:12px; color:var(--muted); font-weight:700; text-transform:uppercase; margin-bottom:10px;">Status Split</div>
+            <div style="display:flex; justify-content:center; margin:10px 0 14px;">
+              <div style="width:140px; height:140px; border-radius:999px; background:conic-gradient(var(--green) 0 ${ringIn}%, #8e66ff ${ringIn}% ${ringIn + ringOut}%, var(--surface2) ${ringIn + ringOut}% 100%); display:flex; align-items:center; justify-content:center;">
+                <div style="width:92px; height:92px; border-radius:999px; background:var(--surface); display:flex; align-items:center; justify-content:center; flex-direction:column;">
+                  <div style="font-size:11px; color:var(--muted);">Total</div>
+                  <div style="font-size:22px; font-weight:800; color:var(--text);">${total}</div>
+                </div>
+              </div>
+            </div>
+            <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px; font-size:12px;">
+              <div style="padding:8px; border-radius:8px; background:var(--surface2);"><strong style="color:var(--green);">${totalIn}</strong><div style="color:var(--muted);">IN (${inPct}%)</div></div>
+              <div style="padding:8px; border-radius:8px; background:var(--surface2);"><strong style="color:var(--accent);">${totalOut}</strong><div style="color:var(--muted);">OUT (${outPct}%)</div></div>
+            </div>
+          </div>
+        </div>
+        <div style="display:grid; grid-template-columns: 1fr 1fr; gap:14px; margin-top:14px;">
+          <div style="border:1px solid var(--border); border-radius:12px; padding:14px; background:var(--surface);">
+            <div style="font-size:12px; color:var(--muted); font-weight:700; text-transform:uppercase; margin-bottom:10px;">Top Active Members</div>
+            ${topMembers.length ? topMembers.map(([name, count], idx) => `
+              <div style="display:flex; justify-content:space-between; align-items:center; padding:8px 0; border-bottom:${idx === topMembers.length - 1 ? 'none' : '1px solid var(--border)'};">
+                <span style="font-size:13px; color:var(--text);">${name}</span>
+                <span style="font-size:12px; padding:3px 8px; border-radius:999px; background:var(--surface2); font-weight:700;">${count}</span>
+              </div>
+            `).join('') : '<div style="font-size:13px; color:var(--muted);">No member activity found.</div>'}
+          </div>
+          <div style="border:1px solid var(--border); border-radius:12px; padding:14px; background:var(--surface);">
+            <div style="font-size:12px; color:var(--muted); font-weight:700; text-transform:uppercase; margin-bottom:10px;">Insights</div>
+            <div style="font-size:13px; color:var(--text); margin-bottom:10px;">Unique members marked: <strong>${uniqueMembers}</strong></div>
+            <div style="font-size:13px; color:var(--text); margin-bottom:10px;">Current week logs: <strong>${currentWeekCount}</strong></div>
+            <div style="font-size:13px; color:var(--text); margin-bottom:10px;">Previous week logs: <strong>${prevWeekCount}</strong></div>
+            <div style="font-size:13px; color:var(--text);">Attendance momentum: <strong style="color:${weekChange >= 0 ? 'var(--green)' : 'var(--red)'};">${fmtChange(weekChange)}</strong></div>
+          </div>
+        </div>
+      </div>
+    `;
+  }
+
+  function generateCommonReport() {
     const output = document.getElementById('report-output');
     output.style.color = 'var(--text)';
     output.style.borderStyle = 'solid';
     output.innerHTML = `
       <div style="font-size:32px; margin-bottom:16px;">📊</div>
-      <h3 style="font-size:20px; font-weight:800; margin-bottom:12px;">Generating ${range.toUpperCase()} Report...</h3>
+      <h3 style="font-size:20px; font-weight:800; margin-bottom:12px;">Loading modern attendance analytics...</h3>
       <div style="max-width:300px; height:8px; background:var(--surface2); border-radius:4px; margin:20px auto; overflow:hidden;">
         <div style="width:60%; height:100%; background:var(--accent); border-radius:4px;"></div>
       </div>
-      <p style="font-size:14px; color: var(--muted);">Connecting to data engine. Please wait...</p>
+      <p style="font-size:14px; color: var(--muted);">Fetching overall attendance data from database...</p>
     `;
-    
-    // Simulate generation
-    setTimeout(() => {
-      output.innerHTML = `
-        <div style="text-align:left;">
-          <h3 style="font-size:18px; font-weight:800; margin-bottom:20px; color:var(--text);">Report: ${range === 'today' ? 'Daily Summary' : (range === 'week' ? 'Weekly Analytics' : 'Monthly Performance')}</h3>
-          <div style="display:grid; grid-template-columns: 1fr 1fr; gap:20px;">
-            <div style="padding:16px; background:var(--surface2); border-radius:10px;">
-              <div style="font-size:11px; text-transform:uppercase; color:var(--muted); font-weight:700;">Detections</div>
-              <div style="font-size:24px; font-weight:800; color:var(--accent); margin-top:4px;">124</div>
-            </div>
-            <div style="padding:16px; background:var(--surface2); border-radius:10px;">
-              <div style="font-size:11px; text-transform:uppercase; color:var(--muted); font-weight:700;">Alerts</div>
-              <div style="font-size:24px; font-weight:800; color:var(--red); margin-top:4px;">12</div>
-            </div>
+
+    syncExportLink();
+    const qs = buildFilterQueryParams();
+
+    fetch('/api/attendance/records?' + qs.toString())
+      .then(r => r.json())
+      .then(data => {
+        if (!data.success) throw new Error(data.error || 'Failed to load report data');
+        renderAttendanceReport(data);
+      })
+      .catch(err => {
+        output.innerHTML = `
+          <div style="text-align:center; color:var(--red);">
+            <div style="font-size:28px; margin-bottom:8px;">⚠️</div>
+            <h3 style="font-size:18px; font-weight:800; margin-bottom:8px;">Failed to generate report</h3>
+            <p style="font-size:13px; color:var(--muted);">${err.message}</p>
           </div>
-          <button style="margin-top:24px; background:var(--accent); color:white; border:none; padding:10px 20px; border-radius:8px; font-size:13px; font-weight:700; cursor:pointer;">📥 Download PDF Report</button>
-        </div>
-      `;
-    }, 1500);
+        `;
+      });
   }
+
+  function setReportRange(mode) {
+    reportFilter.mode = mode;
+    generateCommonReport();
+  }
+
+  function applyCustomReportRange() {
+    const fromEl = document.getElementById('report-date-from');
+    const toEl = document.getElementById('report-date-to');
+    reportFilter.date_from = fromEl ? fromEl.value : '';
+    reportFilter.date_to = toEl ? toEl.value : '';
+    if (!reportFilter.date_from || !reportFilter.date_to) return;
+    reportFilter.mode = 'custom';
+    generateCommonReport();
+  }
+
+  document.addEventListener('DOMContentLoaded', () => {
+    syncExportLink();
+    generateCommonReport();
+  });
 </script>
 {% endblock %}

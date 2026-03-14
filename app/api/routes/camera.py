@@ -10,6 +10,8 @@ Routes:
   GET  /api/stream_id          → Returns current stream ID for frontend polling
   GET  /video_feed             → MJPEG live stream endpoint
   GET  /api/local_cameras      → List user's local IP cameras
+  GET  /api/local_cameras/detected → Auto-detect local/LAN cameras
+  POST /api/local_cameras/detected/metadata → Query ONVIF device metadata
   POST /api/local_cameras      → Add a new local IP camera
   DELETE /api/local_cameras/<id> → Remove a local camera
 """
@@ -19,12 +21,17 @@ from __future__ import annotations
 import logging
 import os
 import time
+import threading
+import uuid
 
+import base64
+import cv2
 from flask import Blueprint, Response, jsonify, request, session
 
 from app.core.security import login_required
 from app.db.session import get_db_connection
 from app.core.extensions import cam_mgr
+from app.services.camera_discovery import detect_cameras, fetch_onvif_device_info
 
 log = logging.getLogger("camera")
 
@@ -39,6 +46,87 @@ APP_SECRET = os.environ.get("IMOU_APP_SECRET", "")
 _camera_cache: list[dict] = []
 _camera_cache_ts: float   = 0.0
 _camera_lock = __import__("threading").Lock()
+
+_preview_tokens: dict[str, dict] = {}
+_preview_lock = threading.Lock()
+_preview_token_ttl_sec = 30
+
+
+def _cleanup_expired_preview_tokens(now: float | None = None) -> None:
+    ts_now = now if now is not None else time.time()
+    expired = [token for token, meta in _preview_tokens.items() if meta["expires_at"] <= ts_now]
+    for token in expired:
+        _preview_tokens.pop(token, None)
+
+
+def _normalize_rtsp_path(path: str) -> str:
+    value = (path or "").strip()
+    if not value:
+        return ""
+    if value.startswith("/"):
+        return value
+    return f"/{value}"
+
+
+def _build_rtsp_url(ip: str, port: int, user: str, password: str, path: str) -> str:
+    normalized_path = _normalize_rtsp_path(path)
+    if user and password:
+        return f"rtsp://{user}:{password}@{ip}:{port}{normalized_path}"
+    return f"rtsp://{ip}:{port}{normalized_path}"
+
+
+def _issue_preview_token(rtsp_url: str, owner_email: str | None) -> str:
+    token = uuid.uuid4().hex
+    now = time.time()
+    with _preview_lock:
+        _cleanup_expired_preview_tokens(now)
+        _preview_tokens[token] = {
+            "rtsp_url": rtsp_url,
+            "owner_email": owner_email,
+            "expires_at": now + _preview_token_ttl_sec,
+        }
+    return token
+
+
+def _test_rtsp_connection(rtsp_url: str) -> tuple[bool, object | None]:
+    cap = cv2.VideoCapture(rtsp_url, cv2.CAP_FFMPEG)
+    if not cap.isOpened():
+        cap.release()
+        return False, None
+
+    ok, frame = False, None
+    for _ in range(8):
+        ok, frame = cap.read()
+        if ok and frame is not None:
+            break
+        time.sleep(0.12)
+    cap.release()
+    if not ok or frame is None:
+        return False, None
+    return True, frame
+
+
+def _generate_mjpeg(rtsp_url: str, max_duration_sec: float | None = None):
+    cap = cv2.VideoCapture(rtsp_url, cv2.CAP_FFMPEG)
+    if not cap.isOpened():
+        cap.release()
+        return
+
+    deadline = (time.time() + max_duration_sec) if max_duration_sec else None
+    try:
+        while True:
+            if deadline and time.time() >= deadline:
+                break
+            ok, frame = cap.read()
+            if not ok or frame is None:
+                break
+            encoded, jpg = cv2.imencode(".jpg", frame, [cv2.IMWRITE_JPEG_QUALITY, 82])
+            if not encoded:
+                continue
+            yield b"--frame\r\nContent-Type: image/jpeg\r\n\r\n" + jpg.tobytes() + b"\r\n"
+            time.sleep(0.04)
+    finally:
+        cap.release()
 
 
 def _fetch_imou_cameras() -> list[dict]:
@@ -268,20 +356,182 @@ def api_local_cameras():
         return jsonify({"error": str(e)}), 500
 
 
-@camera_bp.route("/api/local_cameras/<int:cam_id>", methods=["DELETE"])
+@camera_bp.route("/api/local_cameras/detected", methods=["GET"])
 @login_required
-def api_delete_local_camera(cam_id: int):
+def api_detected_local_cameras():
+    force_refresh = request.args.get("refresh", "0") == "1"
+    try:
+        return jsonify(detect_cameras(force=force_refresh))
+    except Exception as e:
+        log.error("Camera auto-detection failed: %s", e)
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
+@camera_bp.route("/api/local_cameras/test", methods=["POST"])
+@login_required
+def api_test_local_camera():
+    data = request.get_json(force=True)
+    ip    = data.get("ip")
+    port  = data.get("port", 554)
+    user  = data.get("username", "")
+    pw    = data.get("password", "")
+    path  = data.get("path", "")
+
+    if not ip:
+        return jsonify({"success": False, "error": "IP Address is required"}), 400
+
+    rtsp_url = _build_rtsp_url(ip=ip, port=port, user=user, password=pw, path=path)
+
+    log.info("Testing camera connection: %s", rtsp_url)
+    ok, frame = _test_rtsp_connection(rtsp_url)
+    if not ok:
+        return jsonify({"success": False, "error": "Connection Failed"})
+
+    token = _issue_preview_token(rtsp_url=rtsp_url, owner_email=session.get("user"))
+
+    ok, buffer = cv2.imencode(".jpg", frame)
+    if not ok:
+        return jsonify({"success": False, "error": "Connection Failed"})
+
+    base64_img = base64.b64encode(buffer).decode("utf-8")
+    return jsonify({
+        "success": True, 
+        "message": "Connection Successful!",
+        "snapshot": f"data:image/jpeg;base64,{base64_img}",
+        "preview_token": token,
+        "preview_url": f"/api/local_cameras/test/stream?token={token}",
+        "stream_url": f"/camera_test_feed?token={token}",
+    })
+
+
+@camera_bp.route("/api/test_camera", methods=["POST"])
+@login_required
+def api_test_camera():
+    data = request.get_json(force=True)
+    ip = (data.get("ip") or "").strip()
+    port = data.get("port", 554)
+    user = data.get("username", "")
+    pw = data.get("password", "")
+    path = data.get("path", "")
+
+    if not ip:
+        return jsonify({"success": False, "error": "IP Address is required"}), 400
+
+    rtsp_url = _build_rtsp_url(ip=ip, port=port, user=user, password=pw, path=path)
+    ok, _ = _test_rtsp_connection(rtsp_url)
+    if not ok:
+        return jsonify({"success": False, "error": "Connection Failed"})
+
+    token = _issue_preview_token(rtsp_url=rtsp_url, owner_email=session.get("user"))
+    return jsonify({
+        "success": True,
+        "stream_url": f"/camera_test_feed?token={token}",
+    })
+
+
+@camera_bp.route("/api/local_cameras/test/stream", methods=["GET"])
+@login_required
+def api_test_local_camera_stream():
+    token = (request.args.get("token") or "").strip()
+    if not token:
+        return Response("Connection Failed", status=400, mimetype="text/plain")
+
+    with _preview_lock:
+        _cleanup_expired_preview_tokens()
+        token_data = _preview_tokens.get(token)
+        current_user = session.get("user")
+        if not token_data or token_data.get("owner_email") != current_user:
+            return Response("Connection Failed", status=404, mimetype="text/plain")
+        rtsp_url = token_data["rtsp_url"]
+
+    return Response(_generate_mjpeg(rtsp_url, max_duration_sec=10.0), mimetype="multipart/x-mixed-replace; boundary=frame")
+
+
+@camera_bp.route("/camera_test_feed", methods=["GET"])
+@login_required
+def camera_test_feed():
+    token = (request.args.get("token") or "").strip()
+    if not token:
+        return Response("Connection Failed", status=400, mimetype="text/plain")
+    with _preview_lock:
+        _cleanup_expired_preview_tokens()
+        token_data = _preview_tokens.get(token)
+        current_user = session.get("user")
+        if not token_data or token_data.get("owner_email") != current_user:
+            return Response("Connection Failed", status=404, mimetype="text/plain")
+        rtsp_url = token_data["rtsp_url"]
+
+    return Response(_generate_mjpeg(rtsp_url, max_duration_sec=10.0), mimetype="multipart/x-mixed-replace; boundary=frame")
+
+
+@camera_bp.route("/api/local_cameras/detected/metadata", methods=["POST"])
+@login_required
+def api_detected_local_camera_metadata():
+    data = request.get_json(force=True)
+    ip = (data.get("ip") or "").strip()
+    port = int(data.get("port") or 80)
+    username = (data.get("username") or "").strip()
+    password = data.get("password") or ""
+
+    if not ip:
+        return jsonify({"success": False, "error": "ip is required"}), 400
+    if not username or not password:
+        return jsonify({"success": False, "error": "username and password are required"}), 400
+
+    result = fetch_onvif_device_info(ip=ip, port=port, username=username, password=password)
+    return jsonify(result)
+
+
+@camera_bp.route("/api/local_cameras/<int:cam_id>", methods=["DELETE", "PUT", "POST"])
+@login_required
+def api_local_camera_item(cam_id: int):
     email = session.get("user")
     try:
+        if request.method == "DELETE":
+            conn = get_db_connection()
+            cur  = conn.cursor()
+            cur.execute(
+                "DELETE FROM local_cameras WHERE id = %s AND owner_email = %s",
+                (cam_id, email),
+            )
+            conn.commit()
+            cur.close()
+            conn.close()
+            return jsonify({"success": True})
+
+        data = request.get_json(force=True)
+        name = data.get("name")
+        brand = data.get("brand", "Generic")
+        ip = data.get("ip")
+        port = data.get("port", 554)
+        user = data.get("username", "")
+        pw = data.get("password", "")
+        path = data.get("path", "")
+
+        if not name or not ip:
+            return jsonify({"success": False, "error": "Name and IP are required"}), 400
+
         conn = get_db_connection()
-        cur  = conn.cursor()
+        cur = conn.cursor()
         cur.execute(
-            "DELETE FROM local_cameras WHERE id = %s AND owner_email = %s",
-            (cam_id, email),
+            """UPDATE local_cameras
+               SET name = %s,
+                   brand = %s,
+                   ip_address = %s,
+                   port = %s,
+                   username = %s,
+                   password = %s,
+                   stream_path = %s
+               WHERE id = %s AND owner_email = %s""",
+            (name, brand, ip, port, user, pw, path, cam_id, email),
         )
         conn.commit()
+        updated = cur.rowcount
         cur.close()
         conn.close()
+
+        if updated == 0:
+            return jsonify({"success": False, "error": "Camera not found"}), 404
         return jsonify({"success": True})
     except Exception as e:
         return jsonify({"success": False, "error": str(e)}), 500

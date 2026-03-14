@@ -32,6 +32,7 @@ def create_app() -> Flask:
         template_folder=os.path.join(os.path.dirname(os.path.dirname(__file__)), "templates"),
         static_folder=os.path.join(os.path.dirname(os.path.dirname(__file__)), "static"),
     )
+    flask_app.config['TEMPLATES_AUTO_RELOAD'] = True
 
     @flask_app.context_processor
     def inject_user_data():
@@ -88,12 +89,14 @@ def create_app() -> Flask:
     from app.api.routes.detection import api_bp as detection_bp
     from app.api.routes.dashboard import dashboard_bp
     from app.api.routes.user_mgmt import user_mgmt_bp
+    from app.api.routes.telegram_routes import telegram_bp
 
     flask_app.register_blueprint(auth_bp)
     flask_app.register_blueprint(dashboard_bp)
     flask_app.register_blueprint(camera_bp)
     flask_app.register_blueprint(detection_bp)
     flask_app.register_blueprint(user_mgmt_bp)
+    flask_app.register_blueprint(telegram_bp)
 
     # ── Graceful shutdown ────────────────────────────────────────────────────
     atexit.register(cam_mgr.stop_all)

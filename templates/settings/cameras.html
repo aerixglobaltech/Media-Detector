@@ -6,11 +6,26 @@
 <div style="height: calc(100vh - 53px); overflow-y: auto; background: var(--bg); padding: 28px;">
 <div style="background: var(--surface); border-radius: 14px; border: 1px solid var(--border); box-shadow: var(--shadow-sm); padding: 32px 40px; min-height: calc(100vh - 53px - 56px);">
 
-  <a href="/settings" class="s-back">‹ Back to Settings</a>
-  <h2 class="s-mod-title">Local IP Cameras</h2>
-  <p class="s-mod-sub">Add and manage RTSP cameras from your local network.</p>
+  <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:12px;">
+    <div>
+      <h2 class="s-mod-title">Local IP Cameras</h2>
+      <p class="s-mod-sub">Add and manage RTSP cameras from your local network.</p>
+    </div>
+    <button onclick="refreshCameraPage()" style="padding:8px 12px; border:1px solid var(--border); border-radius:8px; background:var(--surface2); color:var(--text); font-size:12px; font-weight:600; cursor:pointer;">Refresh</button>
+  </div>
 
-  <div style="margin-top:28px; display:grid; grid-template-columns:1.5fr 1fr; gap:40px;">
+  <div style="margin-top:28px; display:grid; grid-template-columns:1fr 1.5fr; gap:40px;">
+    <!-- Lists -->
+    <div>
+      <h4 style="margin-bottom:16px; font-size:15px; color: var(--text);">Connected Cameras</h4>
+      <div id="local-cam-list"></div>
+
+      <div style="display:flex; justify-content:space-between; align-items:center; margin:24px 0 12px 0;">
+        <h4 style="margin:0; font-size:15px; color: var(--text);">Detected Cameras</h4>
+      </div>
+      <div id="detected-cam-list"></div>
+    </div>
+
     <!-- Form -->
     <div style="background: var(--surface2); padding:24px; border-radius:12px; border:1px solid var(--border);">
       <h4 style="margin-bottom:16px; font-size:15px; color: var(--text);">Add New Camera</h4>
@@ -27,13 +42,15 @@
         <div class="s-field"><label>Password</label><input type="password" id="lcam-pass" placeholder="••••••••" /></div>
       </div>
       <div class="s-field"><label>RTSP Path</label><input type="text" id="lcam-path" placeholder="Streaming/Channels/101" /></div>
-      <button onclick="addLocalCamera()" style="width:100%; padding:12px; background: var(--accent); color:white; border:none; border-radius:8px; font-weight:700; cursor:pointer; margin-top:10px;">Add Camera</button>
-    </div>
+      
+      <div id="camera-preview" style="height:260px; background:#111; border-radius:10px; display:flex; align-items:center; justify-content:center; color:white; margin: 10px 0;">
+        No preview
+      </div>
 
-    <!-- List -->
-    <div>
-      <h4 style="margin-bottom:16px; font-size:15px; color: var(--text);">Connected Cameras</h4>
-      <div id="local-cam-list"></div>
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 10px;">
+        <button onclick="testConnection()" style="padding:12px; background: var(--surface); color:var(--text); border:1px solid var(--border); border-radius:8px; font-weight:700; cursor:pointer;">Test Connection</button>
+        <button id="save-camera-btn" onclick="saveLocalCamera()" style="padding:12px; background: var(--accent); color:white; border:none; border-radius:8px; font-weight:700; cursor:pointer;">Add Camera</button>
+      </div>
     </div>
   </div>
 
@@ -41,8 +58,6 @@
 </div>
 
 <style>
-.s-back { display:inline-block; background:none; border: 1px solid var(--border); padding: 8px 16px; border-radius: 8px; font-size: 13px; font-weight: 600; color: var(--muted); cursor: pointer; margin-bottom: 24px; transition: all 0.2s; text-decoration:none; }
-.s-back:hover { border-color: var(--accent); color: var(--accent); }
 .s-mod-title { font-size: 22px; font-weight: 800; color: var(--text); margin:0 0 6px 0; }
 .s-mod-sub { font-size: 13px; color: var(--muted); margin:0; }
 .s-field { margin-bottom: 16px; }
@@ -51,12 +66,163 @@
 .s-field input:focus { border-color: var(--accent); }
 
 .cam-item { background: var(--surface); padding:14px; border-radius:10px; border:1px solid var(--border); display:flex; justify-content:space-between; align-items:center; margin-bottom:10px; }
+.cam-item-detected { cursor:pointer; transition: all 0.15s ease; }
+.cam-item-detected:hover { border-color: var(--accent); }
 .cam-item-title { font-weight:600; color: var(--text); }
 .cam-item-sub { font-size:11px; color: var(--muted); }
 </style>
 
 <script>
-  document.addEventListener('DOMContentLoaded', loadLocalCameras);
+  let detectedCameras = [];
+  let localCameras = [];
+  let activePreviewUrl = '';
+  let previewStopTimer = null;
+  let editingLocalCameraId = null;
+
+  document.addEventListener('DOMContentLoaded', () => {
+    loadLocalCameras();
+    loadDetectedCameras();
+  });
+
+  function refreshCameraPage() {
+    loadLocalCameras();
+    loadDetectedCameras(true);
+  }
+
+  function extractRtspPath(rtspUrl) {
+    if (!rtspUrl || typeof rtspUrl !== 'string') return '';
+    const marker = rtspUrl.indexOf('://');
+    if (marker === -1) return '';
+    const firstSlashAfterHost = rtspUrl.indexOf('/', marker + 3);
+    if (firstSlashAfterHost === -1) return '';
+    return rtspUrl.slice(firstSlashAfterHost);
+  }
+
+  function toTitleCase(value) {
+    if (!value) return '';
+    return value.charAt(0).toUpperCase() + value.slice(1);
+  }
+
+  function applyDetectedCamera(index) {
+    const cam = detectedCameras[index];
+    if (!cam) return;
+
+    const existingUsername = document.getElementById('lcam-user').value || '';
+    const existingPassword = document.getElementById('lcam-pass').value || '';
+    const friendlyName = cam.name || (cam.ip ? `Camera ${cam.ip}` : 'Detected Camera');
+    const brand = '';
+    const pathFromHint = Array.isArray(cam.rtsp_hints) && cam.rtsp_hints.length ? extractRtspPath(cam.rtsp_hints[0]) : '';
+    const defaultPath = cam.protocol && cam.protocol.includes('rtsp') ? '/Streaming/Channels/101' : '';
+    const streamPort = cam.rtsp_port || cam.port || (cam.protocol && cam.protocol.includes('rtsp') ? 554 : '');
+    fillCameraForm({
+      name: friendlyName,
+      brand: cam.brand || toTitleCase(cam.protocol || ''),
+      ip: cam.ip || '',
+      port: streamPort || 554,
+      username: existingUsername,
+      password: existingPassword,
+      path: pathFromHint || defaultPath || 'Streaming/Channels/101'
+    });
+    clearPreview('No preview');
+    setEditingCamera(null);
+
+    const nameField = document.getElementById('lcam-name');
+    nameField.focus();
+    nameField.scrollIntoView({ behavior: 'smooth', block: 'center' });
+
+    if (cam.protocol && cam.protocol.includes('onvif')) {
+      fetchDetectedCameraMetadata(cam);
+    }
+
+    if (cam.ip) {
+      testConnection();
+    }
+  }
+
+  function applyLocalCamera(index) {
+    const cam = localCameras[index];
+    if (!cam) return;
+    fillCameraForm(cam);
+    clearPreview('No preview');
+    setEditingCamera(cam.id);
+  }
+
+  function fillCameraForm(cam) {
+    document.getElementById('lcam-name').value = cam.name || '';
+    document.getElementById('lcam-brand').value = cam.brand || '';
+    document.getElementById('lcam-ip').value = cam.ip || '';
+    document.getElementById('lcam-port').value = cam.port || 554;
+    document.getElementById('lcam-user').value = cam.username || '';
+    document.getElementById('lcam-pass').value = cam.password || '';
+    document.getElementById('lcam-path').value = cam.path || 'Streaming/Channels/101';
+
+    const nameField = document.getElementById('lcam-name');
+    nameField.focus();
+    nameField.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  }
+
+  function setEditingCamera(id) {
+    editingLocalCameraId = id;
+    const saveBtn = document.getElementById('save-camera-btn');
+    saveBtn.innerText = id ? 'Update Camera' : 'Add Camera';
+  }
+
+  function clearPreview(message = 'No preview') {
+    const previewBox = document.getElementById('camera-preview');
+    if (previewStopTimer) {
+      clearTimeout(previewStopTimer);
+      previewStopTimer = null;
+    }
+    activePreviewUrl = '';
+    previewBox.innerHTML = message;
+  }
+
+  function resetCameraForm() {
+    ['lcam-name','lcam-brand','lcam-ip','lcam-port','lcam-user','lcam-pass','lcam-path'].forEach((id) => {
+      if (id === 'lcam-port') {
+        document.getElementById(id).value = 554;
+      } else {
+        document.getElementById(id).value = '';
+      }
+    });
+    clearPreview('No preview');
+    setEditingCamera(null);
+  }
+
+  async function fetchDetectedCameraMetadata(cam) {
+    const username = document.getElementById('lcam-user').value.trim();
+    const password = document.getElementById('lcam-pass').value;
+    if (!username || !password || !cam.ip) return;
+
+    try {
+      const res = await fetch('/api/local_cameras/detected/metadata', {
+        method: 'POST',
+        headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({
+          ip: cam.ip,
+          port: cam.onvif_port || 80,
+          username,
+          password
+        })
+      });
+      const data = await res.json();
+      if (!data.success) return;
+
+      const manufacturer = data.manufacturer || '';
+      const model = data.model || '';
+      const display = [manufacturer, model].filter(Boolean).join(' ').trim();
+
+      if (display) {
+        document.getElementById('lcam-brand').value = display;
+      } else if (manufacturer) {
+        document.getElementById('lcam-brand').value = manufacturer;
+      }
+
+      if (manufacturer) {
+        document.getElementById('lcam-name').value = `${manufacturer} Camera`;
+      }
+    } catch (e) {}
+  }
 
   async function loadLocalCameras() {
     const list = document.getElementById('local-cam-list');
@@ -64,20 +230,100 @@
     try {
       const res = await fetch('/api/local_cameras');
       const data = await res.json();
-      if (!data.length) { list.innerHTML = '<p style="color: var(--muted); font-size:13px; border:1px dashed var(--border); padding:16px; border-radius:8px; text-align:center;">No cameras added yet.</p>'; return; }
-      list.innerHTML = data.map(c => `
-        <div class="cam-item">
+      localCameras = Array.isArray(data) ? data : [];
+      if (!localCameras.length) { list.innerHTML = '<p style="color: var(--muted); font-size:13px; border:1px dashed var(--border); padding:16px; border-radius:8px; text-align:center;">No cameras added yet.</p>'; return; }
+      list.innerHTML = localCameras.map((c, i) => `
+        <div class="cam-item cam-item-detected" onclick="applyLocalCamera(${i})" title="Click to auto-fill Add New Camera form">
           <div>
             <div class="cam-item-title">${c.name}</div>
             <div class="cam-item-sub">${c.brand} • ${c.ip}</div>
           </div>
-          <button onclick="deleteLocalCamera(${c.id})" style="background:none; border:none; color: var(--red); cursor:pointer; font-size:12px; font-weight:700;">Remove</button>
+          <button onclick="event.stopPropagation(); deleteLocalCamera(${c.id})" style="background:none; border:none; color: var(--red); cursor:pointer; font-size:12px; font-weight:700;">Remove</button>
         </div>`).join('');
-    } catch (e) { list.innerHTML = 'Error'; }
+    } catch (e) { localCameras = []; list.innerHTML = 'Error'; }
   }
 
-  async function addLocalCamera() {
+  async function loadDetectedCameras(forceRefresh = false) {
+    const list = document.getElementById('detected-cam-list');
+    list.innerHTML = '<p style="color: var(--muted); font-size:12px;">Scanning local system/network...</p>';
+    try {
+      const query = forceRefresh ? '?refresh=1' : '';
+      const res = await fetch('/api/local_cameras/detected' + query);
+      const data = await res.json();
+      if (!Array.isArray(data) || !data.length) {
+        detectedCameras = [];
+        list.innerHTML = '<p style="color: var(--muted); font-size:13px; border:1px dashed var(--border); padding:16px; border-radius:8px; text-align:center;">No cameras auto-detected on this scan.</p>';
+        return;
+      }
+      detectedCameras = data;
+      list.innerHTML = data.map((c, i) => {
+        const displayPort = c.rtsp_port || c.port;
+        const location = c.ip ? `${c.ip}${displayPort ? ':' + displayPort : ''}` : 'Local device';
+        const ports = Array.isArray(c.open_ports) && c.open_ports.length ? ` • Open: ${c.open_ports.join(', ')}` : '';
+        const source = c.source ? ` • ${c.source}` : '';
+        const rtspHint = Array.isArray(c.rtsp_hints) && c.rtsp_hints.length ? `<div class="cam-item-sub" style="margin-top:4px;">RTSP: ${c.rtsp_hints[0]}</div>` : '';
+        return `
+        <div class="cam-item cam-item-detected" onclick="applyDetectedCamera(${i})" title="Click to auto-fill Add New Camera form">
+          <div>
+            <div class="cam-item-title">${c.name}</div>
+            <div class="cam-item-sub">${c.type} • ${location} • ${c.protocol}${source}${ports}</div>
+            ${rtspHint}
+          </div>
+          <div style="font-size:11px; color: var(--muted);">${c.status || ''}</div>
+        </div>`;
+      }).join('');
+    } catch (e) {
+      detectedCameras = [];
+      list.innerHTML = '<p style="color: var(--red); font-size:12px;">Failed to detect cameras.</p>';
+    }
+  }
+
+  async function testConnection() {
     const payload = {
+      ip: document.getElementById('lcam-ip').value,
+      port: parseInt(document.getElementById('lcam-port').value),
+      username: document.getElementById('lcam-user').value,
+      password: document.getElementById('lcam-pass').value,
+      path: document.getElementById('lcam-path').value
+    };
+
+    if (!payload.ip) { alert("IP Address is required for testing."); return; }
+
+    clearPreview('Testing connection...');
+    const previewBox = document.getElementById('camera-preview');
+
+    try {
+      const res = await fetch('/api/test_camera', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+      const data = await res.json();
+      
+      if (data.success) {
+        if (data.stream_url) {
+          const sep = data.stream_url.includes('?') ? '&' : '?';
+          const previewUrl = `${data.stream_url}${sep}_=${Date.now()}`;
+          activePreviewUrl = previewUrl;
+          previewBox.innerHTML = `<img src="${previewUrl}" style="width:100%;height:100%;object-fit:cover;background:#000;" onerror="clearPreview('Connection Failed');">`;
+          previewStopTimer = setTimeout(() => clearPreview('Preview ended'), 10000);
+        } else {
+          clearPreview('Connection Failed');
+        }
+      } else {
+        clearPreview('Connection Failed');
+      }
+    } catch (e) {
+      clearPreview('Connection Failed');
+    }
+  }
+
+  async function testCameraConnection() {
+    return testConnection();
+  }
+
+  async function saveLocalCamera() {
+      const payload = {
       name: document.getElementById('lcam-name').value, brand: document.getElementById('lcam-brand').value,
       ip: document.getElementById('lcam-ip').value, port: parseInt(document.getElementById('lcam-port').value),
       username: document.getElementById('lcam-user').value, password: document.getElementById('lcam-pass').value,
@@ -85,9 +331,18 @@
     };
     if (!payload.name || !payload.ip) { alert("Name and IP are required."); return; }
     try {
-      const res = await fetch('/api/local_cameras', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(payload) });
-      if ((await res.json()).success) { loadLocalCameras(); ['lcam-name','lcam-ip','lcam-user','lcam-pass','lcam-path'].forEach(id => document.getElementById(id).value=''); }
+      const url = editingLocalCameraId ? `/api/local_cameras/${editingLocalCameraId}` : '/api/local_cameras';
+      const method = editingLocalCameraId ? 'PUT' : 'POST';
+      const res = await fetch(url, { method, headers:{'Content-Type':'application/json'}, body:JSON.stringify(payload) });
+      if ((await res.json()).success) { 
+        loadLocalCameras(); 
+        resetCameraForm();
+      }
     } catch (e) {}
+  }
+
+  async function addLocalCamera() {
+    return saveLocalCamera();
   }
 
   async function deleteLocalCamera(id) {

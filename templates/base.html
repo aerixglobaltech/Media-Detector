@@ -194,12 +194,14 @@
           {% endif %}
         </div>
         
+        {% if active_page == 'live' %}
         <div class="topbar-status">
           <div id="sys-badge" class="badge offline">
             <div class="pulse off" id="pulse"></div> Idle
           </div>
           <span id="fps-display" class="fps-chip">– FPS</span>
         </div>
+        {% endif %}
       </div>
 
       <!-- ─── Main View Container ─── -->
@@ -381,7 +383,8 @@
         function updateStats(d) {
           document.getElementById('stat-persons').textContent = d.persons;
           document.getElementById('stat-fps').textContent = d.fps;
-          document.getElementById('fps-display').textContent = d.fps + ' FPS';
+          const fpsChip = document.getElementById('fps-display');
+          if (fpsChip) fpsChip.textContent = d.fps + ' FPS';
           const motEl = document.getElementById('stat-motion');
           motEl.textContent = d.motion ? 'YES' : 'NO';
           motEl.className = 'metric-val ' + (d.motion ? 'green' : 'red');
@@ -414,7 +417,8 @@
         function resetStats() {
           document.getElementById('stat-persons').textContent = '0';
           document.getElementById('stat-fps').textContent = '–';
-          document.getElementById('fps-display').textContent = '– FPS';
+          const fpsChip = document.getElementById('fps-display');
+          if (fpsChip) fpsChip.textContent = '– FPS';
           document.getElementById('stat-motion').textContent = '–';
           document.getElementById('stat-motion').className = 'metric-val';
           document.getElementById('person-cards').innerHTML =
@@ -423,6 +427,7 @@
 
         function setSysOnline(on) {
           const badge = document.getElementById('sys-badge');
+          if (!badge) return;
           badge.className = 'badge ' + (on ? '' : 'offline');
           badge.innerHTML = `<div class="pulse ${on ? '' : 'off'}"></div> ${on ? 'Live' : 'Idle'}`;
         }

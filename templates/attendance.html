@@ -3,22 +3,269 @@
 
 {% block content %}
 <div style="height: calc(100vh - 53px); overflow-y: auto; background: var(--bg); padding: 28px;">
-<div style="background: var(--surface); border-radius: 14px; border: 1px solid var(--border); box-shadow: var(--shadow-sm); padding: 32px 40px; min-height: calc(100vh - 53px - 56px);">
-
-  <div style="margin-bottom: 24px;">
-    <div style="display:flex; align-items:center; gap:12px; margin-bottom:6px;">
-      <span style="font-size:24px;">📅</span>
-      <h1 style="font-size:22px; font-weight:800; color: var(--text); margin:0;">Attendance</h1>
+  <div style="background: var(--surface); border-radius: 14px; border: 1px solid var(--border); box-shadow: var(--shadow-sm); padding: 32px 40px; min-height: calc(100vh - 53px - 56px);">
+    <div style="margin-bottom: 18px; display:flex; justify-content:space-between; align-items:flex-end; gap:16px; flex-wrap:wrap;">
+      <div>
+        <div style="display:flex; align-items:center; gap:10px; margin-bottom:6px;">
+          <span style="font-size:24px;">📅</span>
+          <h1 style="font-size:22px; font-weight:800; color: var(--text); margin:0;">Attendance</h1>
+        </div>
+        <p style="font-size:13px; color: var(--muted); margin:0;">Track and monitor member attendance records</p>
+      </div>
+      <div style="display:flex; align-items:center; gap:10px;">
+        <button id="toggle-att-summary-btn" class="secondary-btn" onclick="toggleAttendanceSummary()"><span>⌃</span> Hide Summary</button>
+        <button class="secondary-btn" onclick="exportAttendance('excel')"><span>📥</span> Export</button>
+      </div>
     </div>
-    <p style="font-size:13px; color: var(--muted); margin:0;">Track and monitor member attendance records</p>
-  </div>
 
-  <div style="border: 1px dashed var(--border); border-radius: 12px; padding: 60px; text-align: center; color: var(--muted);">
-    <div style="font-size: 48px; margin-bottom: 16px;">⏳</div>
-    <h3 style="color: var(--text); font-size: 18px; font-weight: 700;">Under Development</h3>
-    <p style="font-size: 14px; margin-top: 8px;">The Attendance module is being prepared and will be available soon.</p>
-  </div>
+    <div id="attendance-summary" style="display:grid; grid-template-columns:repeat(4,minmax(170px,1fr)); gap:14px; margin-bottom:16px;">
+      <div class="att-card"><div class="att-label">Total Records</div><div class="att-value" id="sum-total">0</div></div>
+      <div class="att-card"><div class="att-label">IN Count</div><div class="att-value" id="sum-in">0</div></div>
+      <div class="att-card"><div class="att-label">OUT Count</div><div class="att-value" id="sum-out">0</div></div>
+      <div class="att-card"><div class="att-label">Today</div><div class="att-value" id="sum-today">0</div></div>
+    </div>
 
+    <div class="att-filter-row">
+      <div class="att-search-wrap" style="position:relative; min-width:0;">
+        <span style="position:absolute; left:12px; top:50%; transform:translateY(-50%); font-size:14px; color: var(--muted);">🔍</span>
+        <input id="att-search" type="text" class="att-input" placeholder="Search by member name, email, phone..." style="padding-left:36px;" oninput="debouncedLoadAttendance()" />
+      </div>
+      <div class="att-range-wrap">
+        <span style="font-size:15px;">📅</span>
+        <input id="att-date-range" type="text" class="att-input" readonly placeholder="Pick a date range" />
+      </div>
+      <select id="att-status" class="att-input" style="width:140px; min-width:140px;" onchange="loadAttendance()">
+        <option value="">All Status</option>
+        <option value="IN">IN</option>
+        <option value="OUT">OUT</option>
+      </select>
+    </div>
+
+    <div style="border:1px solid var(--border); border-radius:12px; overflow:hidden;">
+      <table style="width:100%; border-collapse:collapse;">
+        <thead style="background: var(--surface2);">
+          <tr>
+            <th class="att-th">Member</th>
+            <th class="att-th">Phone</th>
+            <th class="att-th">IN Time</th>
+            <th class="att-th">OUT Time</th>
+            <th class="att-th">Status</th>
+            <th class="att-th">Recorded At</th>
+          </tr>
+        </thead>
+        <tbody id="attendance-table-body">
+          <tr><td colspan="6" class="att-empty">Loading attendance records...</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div id="att-pagination-container" style="margin-top:16px; padding:12px 14px; background: var(--surface); border:1px solid var(--border); border-radius:12px; display:flex; justify-content:space-between; align-items:center; font-size:13px; color: var(--muted);">
+    </div>
+  </div>
 </div>
-</div>
+
+<style>
+  .att-card { background: var(--surface2); border: 1px solid var(--border); border-radius: 12px; padding: 16px 18px; }
+  .att-label { font-size: 12px; color: var(--muted); margin-bottom: 8px; font-weight: 600; }
+  .att-value { font-size: 24px; color: var(--text); font-weight: 800; line-height: 1; }
+  .att-input { width: 100%; padding: 9px 12px; border: 1px solid var(--border); border-radius: 8px; background: var(--bg); color: var(--text); font-size: 13px; outline: none; }
+  .att-input:focus { border-color: var(--accent); }
+  .att-filter-row { display:flex; gap:10px; align-items:center; margin-bottom:16px; flex-wrap:nowrap; }
+  .att-search-wrap { flex:1 1 auto; max-width:560px; }
+  .att-range-wrap { display:flex; align-items:center; gap:8px; border:1px solid var(--border); border-radius:8px; background:var(--bg); padding:0 10px; min-width:230px; }
+  .att-range-wrap .att-input { border:none; background:transparent; padding:9px 0; cursor:pointer; }
+  .att-range-wrap:focus-within { border-color: var(--accent); }
+  .att-th { text-align:left; font-size:12px; color: var(--muted); padding: 12px 14px; border-bottom:1px solid var(--border); text-transform: uppercase; }
+  .att-td { padding: 12px 14px; font-size: 13px; color: var(--text); border-bottom:1px solid var(--border); }
+  .att-empty { padding: 30px; text-align:center; color: var(--muted); font-size: 13px; }
+  .badge-status { display:inline-block; font-size: 11px; font-weight:700; border-radius: 999px; padding: 4px 10px; }
+  .badge-in { background: var(--success-bg); color: var(--green); }
+  .badge-out { background: var(--surface2); color: var(--muted); }
+  @media (max-width: 1100px) {
+    .att-filter-row { flex-wrap:wrap; }
+    .att-search-wrap { max-width:none; width:100%; }
+  }
+</style>
+
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
+<script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
+
+<script>
+  let attendanceSearchTimer = null;
+  let attCurrentPage = 1;
+  let attPageSize = 10;
+  let attTotalRecords = 0;
+  let attSummaryHidden = false;
+
+  function debouncedLoadAttendance() {
+    clearTimeout(attendanceSearchTimer);
+    attendanceSearchTimer = setTimeout(() => { attCurrentPage = 1; loadAttendance(); }, 300);
+  }
+
+  function toggleAttendanceSummary() {
+    attSummaryHidden = !attSummaryHidden;
+    const section = document.getElementById('attendance-summary');
+    const btn = document.getElementById('toggle-att-summary-btn');
+    section.style.display = attSummaryHidden ? 'none' : 'grid';
+    btn.innerHTML = attSummaryHidden ? '<span>⌄</span> Show Summary' : '<span>⌃</span> Hide Summary';
+  }
+
+  function exportAttendance(format) {
+    const { dateFrom, dateTo } = getDateRangeValues();
+    const status = document.getElementById('att-status').value;
+    const q = document.getElementById('att-search').value.trim();
+    const params = new URLSearchParams();
+    params.set('format', format || 'excel');
+    if (dateFrom) params.set('date_from', dateFrom);
+    if (dateTo) params.set('date_to', dateTo);
+    if (status) params.set('status', status);
+    if (q) params.set('q', q);
+    window.location.href = '/api/attendance/export?' + params.toString();
+  }
+
+  function setAttPageSize(val) {
+    attPageSize = parseInt(val, 10) || 10;
+    attCurrentPage = 1;
+    loadAttendance();
+  }
+
+  function changeAttPage(page) {
+    const totalPages = Math.ceil(attTotalRecords / attPageSize) || 1;
+    attCurrentPage = Math.max(1, Math.min(page, totalPages));
+    loadAttendance();
+  }
+
+  function renderAttPagination(totalItems) {
+    const container = document.getElementById('att-pagination-container');
+    if (!container) return;
+    attTotalRecords = totalItems || 0;
+    if (attTotalRecords === 0) {
+      container.innerHTML = '';
+      return;
+    }
+    const totalPages = Math.ceil(attTotalRecords / attPageSize) || 1;
+    if (attCurrentPage > totalPages) attCurrentPage = totalPages;
+    const start = (attCurrentPage - 1) * attPageSize + 1;
+    const end = Math.min(attCurrentPage * attPageSize, attTotalRecords);
+
+    container.innerHTML = `
+      <div style="display:flex; align-items:center; gap:16px;">
+        <span>Showing ${start} - ${end} of ${attTotalRecords} records</span>
+        <div style="display:flex; align-items:center; gap:8px;">
+          <span>Rows per page:</span>
+          <select class="att-input" style="width:78px; padding:4px 6px;" onchange="setAttPageSize(this.value)">
+            <option value="10" ${attPageSize===10?'selected':''}>10</option>
+            <option value="20" ${attPageSize===20?'selected':''}>20</option>
+            <option value="50" ${attPageSize===50?'selected':''}>50</option>
+          </select>
+        </div>
+      </div>
+      <div style="display:flex; align-items:center; gap:8px;">
+        <span style="margin-right:6px;">Page ${attCurrentPage} of ${totalPages}</span>
+        <button class="secondary-btn" style="padding:4px 10px;" onclick="changeAttPage(1)" ${attCurrentPage===1?'disabled':''}>«</button>
+        <button class="secondary-btn" style="padding:4px 10px;" onclick="changeAttPage(${attCurrentPage-1})" ${attCurrentPage===1?'disabled':''}>‹</button>
+        <button class="secondary-btn" style="padding:4px 10px;" onclick="changeAttPage(${attCurrentPage+1})" ${attCurrentPage===totalPages?'disabled':''}>›</button>
+        <button class="secondary-btn" style="padding:4px 10px;" onclick="changeAttPage(${totalPages})" ${attCurrentPage===totalPages?'disabled':''}>»</button>
+      </div>
+    `;
+  }
+
+  function getDateRangeValues() {
+    const rangeInput = document.getElementById('att-date-range');
+    const picker = rangeInput?._flatpickr;
+    if (picker && picker.selectedDates.length) {
+      const from = picker.selectedDates[0] ? picker.formatDate(picker.selectedDates[0], "Y-m-d") : "";
+      const to = picker.selectedDates[1] ? picker.formatDate(picker.selectedDates[1], "Y-m-d") : from;
+      return { dateFrom: from, dateTo: to };
+    }
+    const raw = (rangeInput.value || "").trim();
+    if (!raw) return { dateFrom: "", dateTo: "" };
+    const parts = raw.split(" to ");
+    return { dateFrom: parts[0] || "", dateTo: parts[1] || parts[0] || "" };
+  }
+
+  function initDateRangePicker() {
+    const rangeInput = document.getElementById('att-date-range');
+    if (!rangeInput) return;
+    if (window.flatpickr) {
+      flatpickr(rangeInput, {
+        mode: "range",
+        dateFormat: "Y-m-d",
+        onClose: () => { attCurrentPage = 1; loadAttendance(); },
+      });
+      return;
+    }
+    rangeInput.readOnly = false;
+  }
+
+  function fmtDateTime(value) {
+    if (!value) return '-';
+    const d = new Date(value);
+    if (Number.isNaN(d.getTime())) return '-';
+    return d.toLocaleString();
+  }
+
+  function setSummary(summary) {
+    document.getElementById('sum-total').innerText = summary?.total_records ?? 0;
+    document.getElementById('sum-in').innerText = summary?.total_in ?? 0;
+    document.getElementById('sum-out').innerText = summary?.total_out ?? 0;
+    document.getElementById('sum-today').innerText = summary?.today_total ?? 0;
+  }
+
+  function renderAttendanceRows(records) {
+    const tbody = document.getElementById('attendance-table-body');
+    if (!records || !records.length) {
+      tbody.innerHTML = '<tr><td colspan="6" class="att-empty">No attendance records found.</td></tr>';
+      return;
+    }
+
+    tbody.innerHTML = records.map(r => `
+      <tr>
+        <td class="att-td"><strong>${r.name || '-'}</strong><div style="font-size:11px; color:var(--muted);">${r.email || ''}</div></td>
+        <td class="att-td">${r.phone || '-'}</td>
+        <td class="att-td">${fmtDateTime(r.in_time)}</td>
+        <td class="att-td">${fmtDateTime(r.out_time)}</td>
+        <td class="att-td"><span class="badge-status ${r.status === 'IN' ? 'badge-in' : 'badge-out'}">${r.status || '-'}</span></td>
+        <td class="att-td">${fmtDateTime(r.timestamp)}</td>
+      </tr>
+    `).join('');
+  }
+
+  async function loadAttendance() {
+    const { dateFrom, dateTo } = getDateRangeValues();
+    const status = document.getElementById('att-status').value;
+    const q = document.getElementById('att-search').value.trim();
+
+    const params = new URLSearchParams();
+    if (dateFrom) params.set('date_from', dateFrom);
+    if (dateTo) params.set('date_to', dateTo);
+    if (status) params.set('status', status);
+    if (q) params.set('q', q);
+    params.set('page', String(attCurrentPage));
+    params.set('page_size', String(attPageSize));
+
+    const tbody = document.getElementById('attendance-table-body');
+    tbody.innerHTML = '<tr><td colspan="6" class="att-empty">Loading attendance records...</td></tr>';
+
+    try {
+      const res = await fetch('/api/attendance/records?' + params.toString());
+      const data = await res.json();
+      if (!data.success) {
+        throw new Error(data.error || 'Failed to load attendance');
+      }
+      setSummary(data.summary || {});
+      renderAttendanceRows(data.records || []);
+      renderAttPagination((data.pagination && data.pagination.total_records) || 0);
+    } catch (e) {
+      tbody.innerHTML = `<tr><td colspan="6" class="att-empty" style="color: var(--red);">Failed to load attendance: ${e.message}</td></tr>`;
+      setSummary({ total_records: 0, total_in: 0, total_out: 0, today_total: 0 });
+      renderAttPagination(0);
+    }
+  }
+
+  document.addEventListener('DOMContentLoaded', () => {
+    initDateRangePicker();
+    loadAttendance();
+  });
+</script>
 {% endblock %}
