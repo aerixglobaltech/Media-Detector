@@ -89,17 +89,25 @@ def _issue_preview_token(rtsp_url: str, owner_email: str | None) -> str:
 
 
 def _test_rtsp_connection(rtsp_url: str) -> tuple[bool, object | None]:
-    cap = cv2.VideoCapture(rtsp_url, cv2.CAP_FFMPEG)
+    # Set FFMPEG open timeout to 5 seconds before VideoCapture
+    cap = cv2.VideoCapture()
+    cap.setExceptionMode(False)
+    # CAP_PROP_OPEN_TIMEOUT_MSEC and READ_TIMEOUT_MSEC require OpenCV 4.x+
+    cap.set(cv2.CAP_PROP_OPEN_TIMEOUT_MSEC, 5000)
+    cap.set(cv2.CAP_PROP_READ_TIMEOUT_MSEC, 5000)
+    cap.open(rtsp_url, cv2.CAP_FFMPEG)
+
     if not cap.isOpened():
         cap.release()
         return False, None
 
     ok, frame = False, None
-    for _ in range(8):
+    # Try for up to ~5 seconds — Dahua/Hikvision can take 3-5s to open
+    for _ in range(25):
         ok, frame = cap.read()
         if ok and frame is not None:
             break
-        time.sleep(0.12)
+        time.sleep(0.2)
     cap.release()
     if not ok or frame is None:
         return False, None
