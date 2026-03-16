@@ -305,7 +305,7 @@ function renderScanResults(){
     const cards=cams.map(cam=>{
       const isSaved=cam.ip&&savedIPs.has(cam.ip);
       const displayPort=cam.rtsp_port||cam.port||'';
-      const sub=[cam.ip,displayPort?':'+displayPort:'',cam.protocol?' · '+cam.protocol:''].filter(Boolean).join('');
+      const sub=[cam.ip,displayPort?':'+displayPort:'',cam.protocol?' \u00B7 '+cam.protocol:''].filter(Boolean).join('');
       const dot=cam.status&&cam.status.includes('\uD83D\uDFE2')?'green':'yellow';
       return`<div class="cam-card" onclick="selectDetected(${cam._index})" id="cam-card-${cam._index}">
         <div class="cam-card-dot ${dot}"></div>

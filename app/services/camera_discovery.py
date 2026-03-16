@@ -402,10 +402,10 @@ def detect_cameras(force: bool = False) -> list[dict]:
         if not force and cache_is_fresh and _detected_cache:
             return list(_detected_cache)
 
-    system_cameras = _detect_system_cameras()
-    onvif_cameras = _detect_onvif_cameras()
+    system_cameras  = _detect_system_cameras()
+    onvif_cameras   = _detect_onvif_cameras()
     network_cameras = _detect_network_cameras()
-    network_merged = _merge_detections(onvif_cameras, network_cameras)
+    network_merged  = _merge_detections(onvif_cameras, network_cameras)
 
     for cam in network_merged:
         rtsp_port = cam.get("rtsp_port")
@@ -413,7 +413,10 @@ def detect_cameras(force: bool = False) -> list[dict]:
         if port_for_rtsp in (554, 8554):
             cam["rtsp_hints"] = [f"rtsp://<user>:<pass>@{cam['ip']}:{port_for_rtsp}{path}" for path in _RTSP_PATH_HINTS]
 
-    detected = sorted(system_cameras + network_merged, key=lambda cam: (cam["type"], cam["name"]))
+    detected = sorted(
+        system_cameras + network_merged,
+        key=lambda cam: (cam["type"], cam["name"]),
+    )
 
     with _cache_lock:
         _detected_cache = detected
