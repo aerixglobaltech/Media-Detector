@@ -3,352 +3,436 @@
 {% set sub_page = 'cameras' %}
 
 {% block content %}
-<div style="height: calc(100vh - 53px); overflow-y: auto; background: var(--bg); padding: 28px;">
-<div style="background: var(--surface); border-radius: 14px; border: 1px solid var(--border); box-shadow: var(--shadow-sm); padding: 32px 40px; min-height: calc(100vh - 53px - 56px);">
+<div class="cam-page">
 
-  <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:12px;">
-    <div>
-      <h2 class="s-mod-title">Local IP Cameras</h2>
-      <p class="s-mod-sub">Add and manage RTSP cameras from your local network.</p>
+  <!-- ── Left Panel: Discovery ───────────────────────────────── -->
+  <div class="cam-left">
+
+    <!-- Connected Cameras -->
+    <div class="cam-section">
+      <div class="cam-section-header">
+        <span class="cam-section-title">Connected Cameras</span>
+        <span class="cam-badge" id="connected-count">0</span>
+      </div>
+      <div id="connected-list">
+        <div class="cam-empty-state">No cameras added yet.</div>
+      </div>
     </div>
-    <button onclick="refreshCameraPage()" style="padding:8px 12px; border:1px solid var(--border); border-radius:8px; background:var(--surface2); color:var(--text); font-size:12px; font-weight:600; cursor:pointer;">Refresh</button>
+
+    <!-- Divider -->
+    <div class="cam-divider"></div>
+
+    <!-- Discovery -->
+    <div class="cam-section" style="flex:1; overflow:hidden; display:flex; flex-direction:column;">
+      <div class="cam-section-header">
+        <span class="cam-section-title">Network Scan</span>
+        <button id="scan-btn" class="cam-scan-btn" onclick="startScan()">
+          <svg id="scan-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+          <span id="scan-label">Scan Network</span>
+        </button>
+      </div>
+
+      <div id="scan-status" class="cam-scan-status" style="display:none;">
+        <div class="cam-scan-progress"><div class="cam-scan-bar"></div></div>
+        <span id="scan-status-text" class="cam-scan-status-text">Scanning subnet...</span>
+      </div>
+
+      <div id="scan-results" style="flex:1; overflow-y:auto; margin-top:8px;">
+        <div class="cam-empty-state">Run a scan to discover cameras on your network.</div>
+      </div>
+    </div>
+
   </div>
 
-  <div style="margin-top:28px; display:grid; grid-template-columns:1fr 1.5fr; gap:40px;">
-    <!-- Lists -->
-    <div>
-      <h4 style="margin-bottom:16px; font-size:15px; color: var(--text);">Connected Cameras</h4>
-      <div id="local-cam-list"></div>
+  <!-- ── Right Panel: Camera Configuration ───────────────────── -->
+  <div class="cam-right">
 
-      <div style="display:flex; justify-content:space-between; align-items:center; margin:24px 0 12px 0;">
-        <h4 style="margin:0; font-size:15px; color: var(--text);">Detected Cameras</h4>
+    <div id="cam-empty" class="cam-config-empty">
+      <div class="cam-config-empty-icon">
+        <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M15 10l4.553-2.069A1 1 0 0121 8.87V15.13a1 1 0 01-1.447.9L15 14M3 8a2 2 0 012-2h10a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2V8z"/></svg>
       </div>
-      <div id="detected-cam-list"></div>
+      <p class="cam-config-empty-title">No camera selected</p>
+      <p class="cam-config-empty-sub">Select a detected camera from the scan results, or add one manually.</p>
+      <button class="cam-add-manual-btn" onclick="openManualForm()">+ Add Camera Manually</button>
     </div>
 
-    <!-- Form -->
-    <div style="background: var(--surface2); padding:24px; border-radius:12px; border:1px solid var(--border);">
-      <h4 style="margin-bottom:16px; font-size:15px; color: var(--text);">Add New Camera</h4>
-      <div style="display:grid; grid-template-columns:1fr 1fr; gap:16px;">
-        <div class="s-field"><label>Friendly Name</label><input type="text" id="lcam-name" placeholder="e.g. Front Door" /></div>
-        <div class="s-field"><label>Brand / Model</label><input type="text" id="lcam-brand" placeholder="e.g. Hikvision" /></div>
-      </div>
-      <div style="display:grid; grid-template-columns:2fr 1fr; gap:16px;">
-        <div class="s-field"><label>IP Address</label><input type="text" id="lcam-ip" placeholder="192.168.1.100" /></div>
-        <div class="s-field"><label>Port</label><input type="number" id="lcam-port" value="554" /></div>
-      </div>
-      <div style="display:grid; grid-template-columns:1fr 1fr; gap:16px;">
-        <div class="s-field"><label>Username</label><input type="text" id="lcam-user" placeholder="admin" /></div>
-        <div class="s-field"><label>Password</label><input type="password" id="lcam-pass" placeholder="••••••••" /></div>
-      </div>
-      <div class="s-field"><label>RTSP Path</label><input type="text" id="lcam-path" placeholder="Streaming/Channels/101" /></div>
-      
-      <div id="camera-preview" style="height:260px; background:#111; border-radius:10px; display:flex; align-items:center; justify-content:center; color:white; margin: 10px 0;">
-        No preview
+    <div id="cam-config" class="cam-config-panel" style="display:none;">
+      <div class="cam-config-header">
+        <div>
+          <div class="cam-config-title" id="config-title">Configure Camera</div>
+          <div class="cam-config-subtitle" id="config-subtitle">Fill in the details and test the connection.</div>
+        </div>
+        <button class="cam-config-close" onclick="closeConfig()" title="Close">&#x2715;</button>
       </div>
 
-      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 10px;">
-        <button onclick="testConnection()" style="padding:12px; background: var(--surface); color:var(--text); border:1px solid var(--border); border-radius:8px; font-weight:700; cursor:pointer;">Test Connection</button>
-        <button id="save-camera-btn" onclick="saveLocalCamera()" style="padding:12px; background: var(--accent); color:white; border:none; border-radius:8px; font-weight:700; cursor:pointer;">Add Camera</button>
+      <div id="config-brand-pill" class="cam-brand-pill" style="display:none;"></div>
+
+      <div class="cam-fields">
+        <div class="cam-field-group" style="grid-column: 1/-1;">
+          <label class="cam-label">Friendly Name</label>
+          <input id="f-name" class="cam-input" type="text" placeholder="e.g. Front Entrance" autocomplete="off"/>
+        </div>
+        <div class="cam-field-group">
+          <label class="cam-label">IP Address</label>
+          <input id="f-ip" class="cam-input" type="text" placeholder="192.168.1.100" autocomplete="off" oninput="updateRtspPreview()"/>
+        </div>
+        <div class="cam-field-group">
+          <label class="cam-label">Port</label>
+          <input id="f-port" class="cam-input" type="number" value="554" min="1" max="65535" oninput="updateRtspPreview()"/>
+        </div>
+        <div class="cam-field-group">
+          <label class="cam-label">Username</label>
+          <input id="f-user" class="cam-input" type="text" placeholder="admin" value="admin" autocomplete="off" oninput="updateRtspPreview()"/>
+        </div>
+        <div class="cam-field-group">
+          <label class="cam-label">Password</label>
+          <div class="cam-input-eye-wrap">
+            <input id="f-pass" class="cam-input" type="password" placeholder="admin" value="admin" autocomplete="new-password" oninput="updateRtspPreview()"/>
+            <button class="cam-eye-btn" type="button" onclick="togglePassword()" title="Show/hide password">
+              <svg id="eye-open" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+              <svg id="eye-closed" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="display:none;"><path d="M17.94 17.94A10.07 10.07 0 0112 20c-7 0-11-8-11-8a18.45 18.45 0 015.06-5.94M9.9 4.24A9.12 9.12 0 0112 4c7 0 11 8 11 8a18.5 18.5 0 01-2.16 3.19m-6.72-1.07a3 3 0 11-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>
+            </button>
+          </div>
+        </div>
+        <div class="cam-field-group" style="grid-column: 1/-1;">
+          <label class="cam-label">Stream Path <span class="cam-label-hint" id="brand-path-hint"></span></label>
+          <input id="f-path" class="cam-input cam-input-mono" type="text" placeholder="/Streaming/Channels/101" oninput="updateRtspPreview()"/>
+        </div>
+        <div class="cam-field-group" style="grid-column: 1/-1;">
+          <label class="cam-label">Generated RTSP URL
+            <button class="cam-copy-btn" onclick="copyRtsp()" title="Copy URL">
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>
+              Copy
+            </button>
+          </label>
+          <div id="rtsp-preview" class="cam-rtsp-preview">rtsp://admin:admin@&mdash;:554/&mdash;</div>
+        </div>
+      </div>
+
+      <div id="cam-preview-box" class="cam-preview-box">
+        <div id="cam-preview-inner" class="cam-preview-placeholder">
+          <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="opacity:.3"><path d="M15 10l4.553-2.069A1 1 0 0121 8.87V15.13a1 1 0 01-1.447.9L15 14M3 8a2 2 0 012-2h10a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2V8z"/></svg>
+          <span>No preview</span>
+        </div>
+      </div>
+
+      <div class="cam-actions">
+        <button class="cam-btn-secondary" onclick="testConnection()">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="9 11 12 14 22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/></svg>
+          Test Connection
+        </button>
+        <button id="save-btn" class="cam-btn-primary" onclick="saveCamera()">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M19 21H5a2 2 0 01-2-2V5a2 2 0 012-2h11l5 5v11a2 2 0 01-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
+          Add Camera
+        </button>
       </div>
     </div>
+
   </div>
-
-</div>
 </div>
 
 <style>
-.s-mod-title { font-size: 22px; font-weight: 800; color: var(--text); margin:0 0 6px 0; }
-.s-mod-sub { font-size: 13px; color: var(--muted); margin:0; }
-.s-field { margin-bottom: 16px; }
-.s-field label { display: block; font-size: 12px; font-weight: 600; color: var(--text); margin-bottom: 4px; }
-.s-field input { width: 100%; padding: 8px 12px; border: 1px solid var(--border); border-radius: 6px; font-size: 13px; outline: none; background: var(--bg); color: var(--text); }
-.s-field input:focus { border-color: var(--accent); }
+.cam-page { display:grid; grid-template-columns:320px 1fr; height:calc(100vh - 53px); overflow:hidden; background:var(--bg); }
+.cam-left { background:var(--surface); border-right:1px solid var(--border); display:flex; flex-direction:column; overflow:hidden; padding:20px 0; }
+.cam-section { padding:0 16px; }
+.cam-section-header { display:flex; align-items:center; justify-content:space-between; margin-bottom:10px; }
+.cam-section-title { font-size:11px; font-weight:700; letter-spacing:.08em; text-transform:uppercase; color:var(--muted); }
+.cam-badge { font-size:11px; font-weight:700; background:var(--border); color:var(--muted); border-radius:20px; padding:1px 8px; min-width:22px; text-align:center; }
+.cam-divider { height:1px; background:var(--border); margin:16px 0; }
+.cam-empty-state { font-size:12px; color:var(--muted); text-align:center; padding:16px; border:1px dashed var(--border); border-radius:8px; }
 
-.cam-item { background: var(--surface); padding:14px; border-radius:10px; border:1px solid var(--border); display:flex; justify-content:space-between; align-items:center; margin-bottom:10px; }
-.cam-item-detected { cursor:pointer; transition: all 0.15s ease; }
-.cam-item-detected:hover { border-color: var(--accent); }
-.cam-item-title { font-weight:600; color: var(--text); }
-.cam-item-sub { font-size:11px; color: var(--muted); }
+.cam-scan-btn { display:flex; align-items:center; gap:6px; font-size:11px; font-weight:700; padding:5px 11px; border-radius:6px; border:none; background:var(--accent); color:white; cursor:pointer; transition:opacity .15s,transform .1s; }
+.cam-scan-btn:hover { opacity:.9; }
+.cam-scan-btn:active { transform:scale(.97); }
+.cam-scan-btn:disabled { opacity:.5; cursor:not-allowed; }
+@keyframes cam-spin { to { transform:rotate(360deg); } }
+.cam-scan-btn.scanning #scan-icon { animation:cam-spin .8s linear infinite; }
+
+.cam-scan-status { margin:0 0 8px 0; }
+.cam-scan-progress { height:3px; background:var(--border); border-radius:2px; overflow:hidden; margin-bottom:5px; }
+@keyframes cam-progress { 0%{transform:translateX(-100%)} 100%{transform:translateX(400%)} }
+.cam-scan-bar { height:100%; width:40%; background:var(--accent); border-radius:2px; animation:cam-progress 1.4s ease-in-out infinite; }
+.cam-scan-status-text { font-size:11px; color:var(--muted); }
+
+.cam-brand-group { margin-bottom:12px; }
+.cam-brand-header { display:flex; align-items:center; gap:8px; padding:4px 4px 6px 4px; }
+.cam-brand-icon { border-radius:6px; display:flex; align-items:center; justify-content:center; font-size:11px; font-weight:800; letter-spacing:-.5px; color:white; flex-shrink:0; }
+.cam-brand-name { font-size:12px; font-weight:700; color:var(--text); }
+.cam-brand-count { font-size:10px; color:var(--muted); margin-left:auto; }
+
+.cam-card { display:flex; align-items:center; gap:10px; padding:9px 10px; border-radius:8px; border:1px solid var(--border); background:var(--surface2); margin-bottom:6px; cursor:pointer; transition:border-color .15s,box-shadow .15s; }
+.cam-card:hover { border-color:var(--accent); box-shadow:0 0 0 3px rgba(37,99,235,.08); }
+.cam-card.active { border-color:var(--accent); background:var(--accent-bg); }
+.cam-card-dot { width:7px; height:7px; border-radius:50%; flex-shrink:0; }
+.cam-card-dot.green { background:var(--green); }
+.cam-card-dot.yellow { background:#f59e0b; }
+.cam-card-dot.blue { background:var(--accent); }
+.cam-card-info { flex:1; min-width:0; }
+.cam-card-name { font-size:12px; font-weight:600; color:var(--text); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.cam-card-sub { font-size:10px; color:var(--muted); margin-top:1px; font-family:'JetBrains Mono',monospace; }
+.cam-card-saved-badge { font-size:9px; font-weight:700; letter-spacing:.04em; background:var(--success-bg); color:var(--green); border-radius:4px; padding:1px 5px; white-space:nowrap; }
+.cam-card-remove { background:none; border:none; color:var(--muted); cursor:pointer; padding:2px 4px; font-size:11px; border-radius:4px; transition:color .15s,background .15s; }
+.cam-card-remove:hover { color:var(--red); background:var(--error-bg); }
+
+.cam-right { overflow-y:auto; padding:28px 32px; display:flex; flex-direction:column; }
+.cam-config-empty { flex:1; display:flex; flex-direction:column; align-items:center; justify-content:center; text-align:center; gap:10px; padding:40px; }
+.cam-config-empty-icon { width:68px; height:68px; border-radius:18px; background:var(--surface); border:1px solid var(--border); display:flex; align-items:center; justify-content:center; color:var(--muted); margin-bottom:4px; }
+.cam-config-empty-title { font-size:16px; font-weight:700; color:var(--text); margin:0; }
+.cam-config-empty-sub { font-size:13px; color:var(--muted); margin:0; max-width:280px; line-height:1.5; }
+.cam-add-manual-btn { margin-top:6px; padding:8px 18px; border:1px solid var(--border); border-radius:8px; background:var(--surface); color:var(--text); font-size:13px; font-weight:600; cursor:pointer; transition:border-color .15s; }
+.cam-add-manual-btn:hover { border-color:var(--accent); color:var(--accent); }
+
+.cam-config-panel { background:var(--surface); border:1px solid var(--border); border-radius:14px; padding:28px 32px; box-shadow:var(--shadow-sm); max-width:720px; width:100%; animation:cam-panel-in .18s ease; }
+@keyframes cam-panel-in { from{opacity:0;transform:translateY(6px)} to{opacity:1;transform:translateY(0)} }
+.cam-config-header { display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:16px; }
+.cam-config-title { font-size:18px; font-weight:800; color:var(--text); }
+.cam-config-subtitle { font-size:12px; color:var(--muted); margin-top:3px; }
+.cam-config-close { background:none; border:1px solid var(--border); border-radius:6px; width:28px; height:28px; cursor:pointer; color:var(--muted); font-size:13px; display:flex; align-items:center; justify-content:center; transition:color .15s,border-color .15s; }
+.cam-config-close:hover { color:var(--text); border-color:var(--text); }
+.cam-brand-pill { display:inline-flex; align-items:center; gap:6px; padding:4px 10px; border-radius:20px; font-size:11px; font-weight:700; margin-bottom:18px; }
+
+.cam-fields { display:grid; grid-template-columns:1fr 1fr; gap:14px 20px; margin-bottom:20px; }
+.cam-field-group { display:flex; flex-direction:column; gap:5px; }
+.cam-label { font-size:11px; font-weight:700; color:var(--text); display:flex; align-items:center; gap:6px; }
+.cam-label-hint { font-size:10px; font-weight:500; color:var(--muted); font-style:italic; }
+.cam-input { width:100%; padding:9px 12px; border:1px solid var(--border); border-radius:7px; font-size:13px; outline:none; background:var(--bg); color:var(--text); transition:border-color .15s,box-shadow .15s; font-family:'Inter',sans-serif; }
+.cam-input:focus { border-color:var(--accent); box-shadow:0 0 0 3px rgba(37,99,235,.1); }
+.cam-input-mono { font-family:'JetBrains Mono',monospace; font-size:12px; }
+.cam-input-eye-wrap { position:relative; }
+.cam-input-eye-wrap .cam-input { padding-right:38px; }
+.cam-eye-btn { position:absolute; right:10px; top:50%; transform:translateY(-50%); background:none; border:none; cursor:pointer; color:var(--muted); padding:2px; display:flex; align-items:center; transition:color .15s; }
+.cam-eye-btn:hover { color:var(--text); }
+.cam-rtsp-preview { font-family:'JetBrains Mono',monospace; font-size:11.5px; padding:10px 14px; background:var(--bg); border:1px solid var(--border); border-radius:7px; color:var(--accent); word-break:break-all; line-height:1.5; }
+.cam-copy-btn { display:inline-flex; align-items:center; gap:4px; font-size:10px; font-weight:600; padding:2px 7px; border:1px solid var(--border); border-radius:4px; background:var(--surface2); color:var(--muted); cursor:pointer; transition:color .15s,border-color .15s; }
+.cam-copy-btn:hover { color:var(--accent); border-color:var(--accent); }
+
+.cam-preview-box { height:200px; background:#0c0c0c; border-radius:10px; overflow:hidden; margin-bottom:20px; }
+.cam-preview-placeholder { width:100%; height:100%; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:8px; color:#555; font-size:12px; }
+.cam-actions { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
+.cam-btn-secondary { display:flex; align-items:center; justify-content:center; gap:7px; padding:11px; border:1px solid var(--border); border-radius:8px; background:var(--surface2); color:var(--text); font-size:13px; font-weight:700; cursor:pointer; transition:border-color .15s; }
+.cam-btn-secondary:hover { border-color:var(--accent); color:var(--accent); }
+.cam-btn-primary { display:flex; align-items:center; justify-content:center; gap:7px; padding:11px; border:none; border-radius:8px; background:var(--accent); color:white; font-size:13px; font-weight:700; cursor:pointer; transition:opacity .15s; }
+.cam-btn-primary:hover { opacity:.88; }
 </style>
 
 <script>
-  let detectedCameras = [];
-  let localCameras = [];
-  let activePreviewUrl = '';
-  let previewStopTimer = null;
-  let editingLocalCameraId = null;
+const BRAND_RTSP_PATHS = {
+  'hikvision':'/Streaming/Channels/101','hik':'/Streaming/Channels/101',
+  'dahua':'/cam/realmonitor?channel=1&subtype=0','amcrest':'/cam/realmonitor?channel=1&subtype=0','imou':'/cam/realmonitor?channel=1&subtype=0',
+  'reolink':'/h264/ch0/main/av_stream','axis':'/axis-media/media.amp',
+  'hanwha':'/profile1/media.smp','samsung':'/profile1/media.smp','wisenet':'/profile1/media.smp',
+  'vivotek':'/live.sdp','sony':'/media/video1','bosch':'/rtsp_tunnel',
+  'tp-link':'/stream1','tapo':'/stream1','uniview':'/unicast/c1/s0/live',
+  'tiandy':'/Streaming/Channels/101','foscam':'/videoMain','pelco':'/stream1','onvif':'/Streaming/Channels/101',
+};
+const BRAND_COLORS = {
+  'hikvision':'#e02020','hik':'#e02020','dahua':'#0057b7','reolink':'#ff6600',
+  'axis':'#003087','amcrest':'#2563eb','imou':'#00a0e9','hanwha':'#002d62',
+  'wisenet':'#002d62','samsung':'#1428a0','tp-link':'#4caf50','tapo':'#4caf50',
+  'uniview':'#ff4500','bosch':'#e20015','vivotek':'#005bac','foscam':'#00529c',
+  'onvif':'#6366f1','system':'#0f172a','generic':'#64748b','unknown':'#64748b',
+};
+function getBrandColor(b){const k=(b||'').toLowerCase();for(const[key,v] of Object.entries(BRAND_COLORS)){if(k.includes(key))return v;}return'#64748b';}
+function getBrandInitials(b){const n=(b||'IP').trim();const w=n.split(/\s+/).filter(Boolean);return w.length===1?n.slice(0,2).toUpperCase():(w[0][0]+w[1][0]).toUpperCase();}
+function getRtspPath(b){const k=(b||'').toLowerCase();for(const[key,v] of Object.entries(BRAND_RTSP_PATHS)){if(k.includes(key))return v;}return'/Streaming/Channels/101';}
 
-  document.addEventListener('DOMContentLoaded', () => {
-    loadLocalCameras();
-    loadDetectedCameras();
+let detectedCameras=[],connectedCameras=[],editingCameraId=null,activeCardEl=null,previewStopTimer=null;
+
+document.addEventListener('DOMContentLoaded',()=>{ loadConnected(); });
+
+async function loadConnected(){
+  try{ const r=await fetch('/api/local_cameras'); connectedCameras=await r.json(); }catch(e){ connectedCameras=[]; }
+  renderConnected();
+}
+function renderConnected(){
+  const list=document.getElementById('connected-list');
+  document.getElementById('connected-count').textContent=connectedCameras.length;
+  if(!connectedCameras.length){ list.innerHTML='<div class="cam-empty-state">No cameras added yet.</div>'; return; }
+  list.innerHTML=connectedCameras.map((c,i)=>{
+    const color=getBrandColor(c.brand); const ini=getBrandInitials(c.brand||'IP');
+    return`<div class="cam-card" onclick="editConnected(${i})">
+      <div class="cam-card-dot green"></div>
+      <div class="cam-brand-icon" style="background:${color};width:26px;height:26px;font-size:9px;">${ini}</div>
+      <div class="cam-card-info"><div class="cam-card-name">${c.name}</div><div class="cam-card-sub">${c.ip||'—'}:${c.port||554}</div></div>
+      <button class="cam-card-remove" onclick="event.stopPropagation();removeCamera(${c.id})" title="Remove">&#x2715;</button>
+    </div>`;
+  }).join('');
+}
+async function removeCamera(id){ if(!confirm('Remove this camera?'))return; await fetch('/api/local_cameras/'+id,{method:'DELETE'}); await loadConnected(); if(editingCameraId===id)closeConfig(); }
+function editConnected(i){
+  const c=connectedCameras[i]; if(!c)return;
+  editingCameraId=c.id;
+  openConfig({name:c.name,brand:c.brand||'',ip:c.ip,port:c.port||554,username:c.username||'admin',password:c.password||'admin',path:c.path||getRtspPath(c.brand),title:c.name,subtitle:'Edit connected camera'});
+  document.getElementById('save-btn').textContent='Update Camera';
+}
+
+async function startScan(){
+  const btn=document.getElementById('scan-btn');
+  const statusEl=document.getElementById('scan-status');
+  const results=document.getElementById('scan-results');
+  btn.disabled=true; btn.classList.add('scanning');
+  document.getElementById('scan-label').textContent='Scanning...';
+  statusEl.style.display='block';
+  document.getElementById('scan-status-text').textContent='Discovering cameras on your network...';
+  results.innerHTML='<div class="cam-empty-state">Scanning — this may take 10–30 seconds.</div>';
+  try{
+    const r=await fetch('/api/local_cameras/detected?refresh=1');
+    detectedCameras=await r.json();
+    document.getElementById('scan-status-text').textContent=`Found ${detectedCameras.length} device(s).`;
+    renderScanResults();
+  }catch(e){
+    results.innerHTML='<div class="cam-empty-state" style="color:var(--red);">Scan failed. Check network access.</div>';
+    document.getElementById('scan-status-text').textContent='Scan failed.';
+  }finally{
+    btn.disabled=false; btn.classList.remove('scanning');
+    document.getElementById('scan-label').textContent='Scan Network';
+    setTimeout(()=>{statusEl.style.display='none';},3000);
+  }
+}
+function renderScanResults(){
+  const results=document.getElementById('scan-results');
+  if(!detectedCameras.length){ results.innerHTML='<div class="cam-empty-state">No cameras found on this scan.</div>'; return; }
+  const groups={};
+  detectedCameras.forEach((cam,i)=>{
+    const raw=cam.brand||(cam.protocol==='onvif'?'ONVIF':cam.type==='system'?'System':'Unknown');
+    const brand=raw.charAt(0).toUpperCase()+raw.slice(1);
+    if(!groups[brand])groups[brand]=[];
+    groups[brand].push({...cam,_index:i});
   });
+  const savedIPs=new Set(connectedCameras.map(c=>c.ip));
+  results.innerHTML=Object.entries(groups).map(([brand,cams])=>{
+    const color=getBrandColor(brand); const ini=getBrandInitials(brand);
+    const cards=cams.map(cam=>{
+      const isSaved=cam.ip&&savedIPs.has(cam.ip);
+      const displayPort=cam.rtsp_port||cam.port||'';
+      const sub=[cam.ip,displayPort?':'+displayPort:'',cam.protocol?' · '+cam.protocol:''].filter(Boolean).join('');
+      const dot=cam.status&&cam.status.includes('\uD83D\uDFE2')?'green':'yellow';
+      return`<div class="cam-card" onclick="selectDetected(${cam._index})" id="cam-card-${cam._index}">
+        <div class="cam-card-dot ${dot}"></div>
+        <div class="cam-card-info"><div class="cam-card-name">${cam.name}</div><div class="cam-card-sub">${sub||cam.source||'—'}</div></div>
+        ${isSaved?'<span class="cam-card-saved-badge">SAVED</span>':''}
+      </div>`;
+    }).join('');
+    return`<div class="cam-brand-group">
+      <div class="cam-brand-header">
+        <div class="cam-brand-icon" style="background:${color};width:26px;height:26px;">${ini}</div>
+        <span class="cam-brand-name">${brand}</span>
+        <span class="cam-brand-count">${cams.length} found</span>
+      </div>${cards}
+    </div>`;
+  }).join('');
+}
+function selectDetected(index){
+  const cam=detectedCameras[index]; if(!cam)return;
+  if(activeCardEl)activeCardEl.classList.remove('active');
+  const el=document.getElementById('cam-card-'+index);
+  if(el){el.classList.add('active');activeCardEl=el;}
+  editingCameraId=null;
+  const brand=cam.brand||(cam.protocol==='onvif'?'ONVIF':'');
+  const port=cam.rtsp_port||cam.port||554;
+  const path=Array.isArray(cam.rtsp_hints)&&cam.rtsp_hints.length?extractRtspPath(cam.rtsp_hints[0]):getRtspPath(brand);
+  openConfig({name:cam.name||'Camera '+cam.ip,brand,ip:cam.ip||'',port,username:'admin',password:'admin',path,title:cam.name||'Detected Camera',subtitle:(cam.ip||'local')+' \u00B7 '+(cam.protocol||'unknown protocol')});
+  document.getElementById('save-btn').textContent='Add Camera';
+}
 
-  function refreshCameraPage() {
-    loadLocalCameras();
-    loadDetectedCameras(true);
-  }
+function openConfig({name,brand,ip,port,username,password,path,title,subtitle}){
+  document.getElementById('cam-empty').style.display='none';
+  document.getElementById('cam-config').style.display='block';
+  document.getElementById('config-title').textContent=title||'Configure Camera';
+  document.getElementById('config-subtitle').textContent=subtitle||'';
+  const pill=document.getElementById('config-brand-pill');
+  if(brand){
+    const color=getBrandColor(brand);
+    pill.style.display='inline-flex'; pill.style.color=color;
+    pill.style.borderColor=color+'33'; pill.style.background=color+'12';
+    pill.textContent='\u25CF '+brand.charAt(0).toUpperCase()+brand.slice(1);
+  } else { pill.style.display='none'; }
+  document.getElementById('f-name').value=name||'';
+  document.getElementById('f-ip').value=ip||'';
+  document.getElementById('f-port').value=port||554;
+  document.getElementById('f-user').value=username||'admin';
+  document.getElementById('f-pass').value=password||'admin';
+  document.getElementById('f-pass').type='password';
+  document.getElementById('eye-open').style.display='block';
+  document.getElementById('eye-closed').style.display='none';
+  document.getElementById('f-path').value=path||'';
+  const hintKey=(brand||'').toLowerCase();
+  let hint='';
+  for(const[k,v] of Object.entries(BRAND_RTSP_PATHS)){if(hintKey.includes(k)){hint='· '+v.split('?')[0].slice(0,28)+(v.length>28?'…':'');break;}}
+  document.getElementById('brand-path-hint').textContent=hint;
+  clearPreview(); updateRtspPreview();
+}
+function openManualForm(){
+  editingCameraId=null; if(activeCardEl)activeCardEl.classList.remove('active'); activeCardEl=null;
+  openConfig({name:'',brand:'',ip:'',port:554,username:'admin',password:'admin',path:'/Streaming/Channels/101',title:'Add Camera Manually',subtitle:'Enter camera details to connect.'});
+  document.getElementById('save-btn').textContent='Add Camera';
+}
+function closeConfig(){
+  document.getElementById('cam-config').style.display='none';
+  document.getElementById('cam-empty').style.display='flex';
+  if(activeCardEl)activeCardEl.classList.remove('active');
+  activeCardEl=null; editingCameraId=null; clearPreview();
+}
 
-  function extractRtspPath(rtspUrl) {
-    if (!rtspUrl || typeof rtspUrl !== 'string') return '';
-    const marker = rtspUrl.indexOf('://');
-    if (marker === -1) return '';
-    const firstSlashAfterHost = rtspUrl.indexOf('/', marker + 3);
-    if (firstSlashAfterHost === -1) return '';
-    return rtspUrl.slice(firstSlashAfterHost);
-  }
-
-  function toTitleCase(value) {
-    if (!value) return '';
-    return value.charAt(0).toUpperCase() + value.slice(1);
-  }
-
-  function applyDetectedCamera(index) {
-    const cam = detectedCameras[index];
-    if (!cam) return;
-
-    const existingUsername = document.getElementById('lcam-user').value || '';
-    const existingPassword = document.getElementById('lcam-pass').value || '';
-    const friendlyName = cam.name || (cam.ip ? `Camera ${cam.ip}` : 'Detected Camera');
-    const brand = '';
-    const pathFromHint = Array.isArray(cam.rtsp_hints) && cam.rtsp_hints.length ? extractRtspPath(cam.rtsp_hints[0]) : '';
-    const defaultPath = cam.protocol && cam.protocol.includes('rtsp') ? '/Streaming/Channels/101' : '';
-    const streamPort = cam.rtsp_port || cam.port || (cam.protocol && cam.protocol.includes('rtsp') ? 554 : '');
-    fillCameraForm({
-      name: friendlyName,
-      brand: cam.brand || toTitleCase(cam.protocol || ''),
-      ip: cam.ip || '',
-      port: streamPort || 554,
-      username: existingUsername,
-      password: existingPassword,
-      path: pathFromHint || defaultPath || 'Streaming/Channels/101'
-    });
-    clearPreview('No preview');
-    setEditingCamera(null);
-
-    const nameField = document.getElementById('lcam-name');
-    nameField.focus();
-    nameField.scrollIntoView({ behavior: 'smooth', block: 'center' });
-
-    if (cam.protocol && cam.protocol.includes('onvif')) {
-      fetchDetectedCameraMetadata(cam);
-    }
-
-    if (cam.ip) {
-      testConnection();
-    }
-  }
-
-  function applyLocalCamera(index) {
-    const cam = localCameras[index];
-    if (!cam) return;
-    fillCameraForm(cam);
-    clearPreview('No preview');
-    setEditingCamera(cam.id);
-  }
-
-  function fillCameraForm(cam) {
-    document.getElementById('lcam-name').value = cam.name || '';
-    document.getElementById('lcam-brand').value = cam.brand || '';
-    document.getElementById('lcam-ip').value = cam.ip || '';
-    document.getElementById('lcam-port').value = cam.port || 554;
-    document.getElementById('lcam-user').value = cam.username || '';
-    document.getElementById('lcam-pass').value = cam.password || '';
-    document.getElementById('lcam-path').value = cam.path || 'Streaming/Channels/101';
-
-    const nameField = document.getElementById('lcam-name');
-    nameField.focus();
-    nameField.scrollIntoView({ behavior: 'smooth', block: 'center' });
-  }
-
-  function setEditingCamera(id) {
-    editingLocalCameraId = id;
-    const saveBtn = document.getElementById('save-camera-btn');
-    saveBtn.innerText = id ? 'Update Camera' : 'Add Camera';
-  }
-
-  function clearPreview(message = 'No preview') {
-    const previewBox = document.getElementById('camera-preview');
-    if (previewStopTimer) {
-      clearTimeout(previewStopTimer);
-      previewStopTimer = null;
-    }
-    activePreviewUrl = '';
-    previewBox.innerHTML = message;
-  }
-
-  function resetCameraForm() {
-    ['lcam-name','lcam-brand','lcam-ip','lcam-port','lcam-user','lcam-pass','lcam-path'].forEach((id) => {
-      if (id === 'lcam-port') {
-        document.getElementById(id).value = 554;
-      } else {
-        document.getElementById(id).value = '';
-      }
-    });
-    clearPreview('No preview');
-    setEditingCamera(null);
-  }
-
-  async function fetchDetectedCameraMetadata(cam) {
-    const username = document.getElementById('lcam-user').value.trim();
-    const password = document.getElementById('lcam-pass').value;
-    if (!username || !password || !cam.ip) return;
-
-    try {
-      const res = await fetch('/api/local_cameras/detected/metadata', {
-        method: 'POST',
-        headers: {'Content-Type':'application/json'},
-        body: JSON.stringify({
-          ip: cam.ip,
-          port: cam.onvif_port || 80,
-          username,
-          password
-        })
-      });
-      const data = await res.json();
-      if (!data.success) return;
-
-      const manufacturer = data.manufacturer || '';
-      const model = data.model || '';
-      const display = [manufacturer, model].filter(Boolean).join(' ').trim();
-
-      if (display) {
-        document.getElementById('lcam-brand').value = display;
-      } else if (manufacturer) {
-        document.getElementById('lcam-brand').value = manufacturer;
-      }
-
-      if (manufacturer) {
-        document.getElementById('lcam-name').value = `${manufacturer} Camera`;
-      }
-    } catch (e) {}
-  }
-
-  async function loadLocalCameras() {
-    const list = document.getElementById('local-cam-list');
-    list.innerHTML = '<p style="color:#6b7280;font-size:12px;">Loading...</p>';
-    try {
-      const res = await fetch('/api/local_cameras');
-      const data = await res.json();
-      localCameras = Array.isArray(data) ? data : [];
-      if (!localCameras.length) { list.innerHTML = '<p style="color: var(--muted); font-size:13px; border:1px dashed var(--border); padding:16px; border-radius:8px; text-align:center;">No cameras added yet.</p>'; return; }
-      list.innerHTML = localCameras.map((c, i) => `
-        <div class="cam-item cam-item-detected" onclick="applyLocalCamera(${i})" title="Click to auto-fill Add New Camera form">
-          <div>
-            <div class="cam-item-title">${c.name}</div>
-            <div class="cam-item-sub">${c.brand} • ${c.ip}</div>
-          </div>
-          <button onclick="event.stopPropagation(); deleteLocalCamera(${c.id})" style="background:none; border:none; color: var(--red); cursor:pointer; font-size:12px; font-weight:700;">Remove</button>
-        </div>`).join('');
-    } catch (e) { localCameras = []; list.innerHTML = 'Error'; }
-  }
-
-  async function loadDetectedCameras(forceRefresh = false) {
-    const list = document.getElementById('detected-cam-list');
-    list.innerHTML = '<p style="color: var(--muted); font-size:12px;">Scanning local system/network...</p>';
-    try {
-      const query = forceRefresh ? '?refresh=1' : '';
-      const res = await fetch('/api/local_cameras/detected' + query);
-      const data = await res.json();
-      if (!Array.isArray(data) || !data.length) {
-        detectedCameras = [];
-        list.innerHTML = '<p style="color: var(--muted); font-size:13px; border:1px dashed var(--border); padding:16px; border-radius:8px; text-align:center;">No cameras auto-detected on this scan.</p>';
-        return;
-      }
-      detectedCameras = data;
-      list.innerHTML = data.map((c, i) => {
-        const displayPort = c.rtsp_port || c.port;
-        const location = c.ip ? `${c.ip}${displayPort ? ':' + displayPort : ''}` : 'Local device';
-        const ports = Array.isArray(c.open_ports) && c.open_ports.length ? ` • Open: ${c.open_ports.join(', ')}` : '';
-        const source = c.source ? ` • ${c.source}` : '';
-        const rtspHint = Array.isArray(c.rtsp_hints) && c.rtsp_hints.length ? `<div class="cam-item-sub" style="margin-top:4px;">RTSP: ${c.rtsp_hints[0]}</div>` : '';
-        return `
-        <div class="cam-item cam-item-detected" onclick="applyDetectedCamera(${i})" title="Click to auto-fill Add New Camera form">
-          <div>
-            <div class="cam-item-title">${c.name}</div>
-            <div class="cam-item-sub">${c.type} • ${location} • ${c.protocol}${source}${ports}</div>
-            ${rtspHint}
-          </div>
-          <div style="font-size:11px; color: var(--muted);">${c.status || ''}</div>
-        </div>`;
-      }).join('');
-    } catch (e) {
-      detectedCameras = [];
-      list.innerHTML = '<p style="color: var(--red); font-size:12px;">Failed to detect cameras.</p>';
-    }
-  }
-
-  async function testConnection() {
-    const payload = {
-      ip: document.getElementById('lcam-ip').value,
-      port: parseInt(document.getElementById('lcam-port').value),
-      username: document.getElementById('lcam-user').value,
-      password: document.getElementById('lcam-pass').value,
-      path: document.getElementById('lcam-path').value
-    };
-
-    if (!payload.ip) { alert("IP Address is required for testing."); return; }
-
-    clearPreview('Testing connection...');
-    const previewBox = document.getElementById('camera-preview');
-
-    try {
-      const res = await fetch('/api/test_camera', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
-      });
-      const data = await res.json();
-      
-      if (data.success) {
-        if (data.stream_url) {
-          const sep = data.stream_url.includes('?') ? '&' : '?';
-          const previewUrl = `${data.stream_url}${sep}_=${Date.now()}`;
-          activePreviewUrl = previewUrl;
-          previewBox.innerHTML = `<img src="${previewUrl}" style="width:100%;height:100%;object-fit:cover;background:#000;" onerror="clearPreview('Connection Failed');">`;
-          previewStopTimer = setTimeout(() => clearPreview('Preview ended'), 10000);
-        } else {
-          clearPreview('Connection Failed');
-        }
-      } else {
-        clearPreview('Connection Failed');
-      }
-    } catch (e) {
-      clearPreview('Connection Failed');
-    }
-  }
-
-  async function testCameraConnection() {
-    return testConnection();
-  }
-
-  async function saveLocalCamera() {
-      const payload = {
-      name: document.getElementById('lcam-name').value, brand: document.getElementById('lcam-brand').value,
-      ip: document.getElementById('lcam-ip').value, port: parseInt(document.getElementById('lcam-port').value),
-      username: document.getElementById('lcam-user').value, password: document.getElementById('lcam-pass').value,
-      path: document.getElementById('lcam-path').value
-    };
-    if (!payload.name || !payload.ip) { alert("Name and IP are required."); return; }
-    try {
-      const url = editingLocalCameraId ? `/api/local_cameras/${editingLocalCameraId}` : '/api/local_cameras';
-      const method = editingLocalCameraId ? 'PUT' : 'POST';
-      const res = await fetch(url, { method, headers:{'Content-Type':'application/json'}, body:JSON.stringify(payload) });
-      if ((await res.json()).success) { 
-        loadLocalCameras(); 
-        resetCameraForm();
-      }
-    } catch (e) {}
-  }
-
-  async function addLocalCamera() {
-    return saveLocalCamera();
-  }
-
-  async function deleteLocalCamera(id) {
-    if (!confirm("Remove this camera?")) return;
-    const res = await fetch('/api/local_cameras/'+id, {method:'DELETE'});
-    if ((await res.json()).success) loadLocalCameras();
-  }
+function updateRtspPreview(){
+  const ip=document.getElementById('f-ip').value||'\u2014';
+  const port=document.getElementById('f-port').value||'554';
+  const user=document.getElementById('f-user').value||'user';
+  const pass=document.getElementById('f-pass').value||'\u2022\u2022\u2022\u2022';
+  const p=document.getElementById('f-path').value||'/\u2014';
+  const norm=p.startsWith('/')?p:'/'+p;
+  document.getElementById('rtsp-preview').textContent='rtsp://'+user+':'+pass+'@'+ip+':'+port+norm;
+}
+function extractRtspPath(url){if(!url)return'';const idx=url.indexOf('://',url.indexOf('://')+3);const sl=url.indexOf('/',url.indexOf('://')+3);return sl!==-1?url.slice(sl):'';}
+function copyRtsp(){
+  navigator.clipboard.writeText(document.getElementById('rtsp-preview').textContent).then(()=>{
+    const b=document.querySelector('.cam-copy-btn'); b.textContent='\u2713 Copied!';
+    setTimeout(()=>{b.innerHTML='<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg> Copy';},1500);
+  });
+}
+function togglePassword(){
+  const inp=document.getElementById('f-pass'); const hide=inp.type==='password';
+  inp.type=hide?'text':'password';
+  document.getElementById('eye-open').style.display=hide?'none':'block';
+  document.getElementById('eye-closed').style.display=hide?'block':'none';
+}
+async function testConnection(){
+  const ip=document.getElementById('f-ip').value.trim();
+  if(!ip){alert('IP Address is required for testing.');return;}
+  const payload={ip,port:parseInt(document.getElementById('f-port').value),username:document.getElementById('f-user').value,password:document.getElementById('f-pass').value,path:document.getElementById('f-path').value};
+  setPreview('Testing connection...');
+  try{
+    const r=await fetch('/api/test_camera',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
+    const data=await r.json();
+    if(data.success&&data.stream_url){
+      const sep=data.stream_url.includes('?')?'&':'?';
+      const url=data.stream_url+sep+'_='+Date.now();
+      document.getElementById('cam-preview-inner').innerHTML='<img src="'+url+'" style="width:100%;height:100%;object-fit:cover;" onerror="setPreview(\'Connection Failed\')">';
+      if(previewStopTimer)clearTimeout(previewStopTimer);
+      previewStopTimer=setTimeout(()=>clearPreview(),10000);
+    } else { setPreview('Connection Failed'); }
+  }catch(e){ setPreview('Connection Failed'); }
+}
+function setPreview(msg){ document.getElementById('cam-preview-inner').innerHTML='<div class="cam-preview-placeholder"><span>'+msg+'</span></div>'; }
+function clearPreview(){
+  if(previewStopTimer){clearTimeout(previewStopTimer);previewStopTimer=null;}
+  document.getElementById('cam-preview-inner').innerHTML='<div class="cam-preview-placeholder"><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="opacity:.3"><path d="M15 10l4.553-2.069A1 1 0 0121 8.87V15.13a1 1 0 01-1.447.9L15 14M3 8a2 2 0 012-2h10a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2V8z"/></svg><span>No preview</span></div>';
+}
+async function saveCamera(){
+  const name=document.getElementById('f-name').value.trim();
+  const ip=document.getElementById('f-ip').value.trim();
+  if(!name||!ip){alert('Friendly Name and IP Address are required.');return;}
+  const pill=document.getElementById('config-brand-pill');
+  const brand=pill.style.display!=='none'?pill.textContent.replace('\u25CF ','').trim():'';
+  const payload={name,brand,ip,port:parseInt(document.getElementById('f-port').value),username:document.getElementById('f-user').value,password:document.getElementById('f-pass').value,path:document.getElementById('f-path').value};
+  const url=editingCameraId?'/api/local_cameras/'+editingCameraId:'/api/local_cameras';
+  const method=editingCameraId?'PUT':'POST';
+  try{
+    const r=await fetch(url,{method,headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
+    const data=await r.json();
+    if(data.success){await loadConnected();closeConfig();}
+    else alert('Save failed: '+(data.error||'Unknown error'));
+  }catch(e){alert('Save failed.');}
+}
 </script>
 {% endblock %}
