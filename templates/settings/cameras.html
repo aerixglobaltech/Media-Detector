@@ -173,6 +173,11 @@
 .cam-card-saved-badge { font-size:9px; font-weight:700; letter-spacing:.04em; background:var(--success-bg); color:var(--green); border-radius:4px; padding:1px 5px; white-space:nowrap; }
 .cam-card-remove { background:none; border:none; color:var(--muted); cursor:pointer; padding:2px 4px; font-size:11px; border-radius:4px; transition:color .15s,background .15s; }
 .cam-card-remove:hover { color:var(--red); background:var(--error-bg); }
+.cam-card-name-row { display:flex; align-items:center; gap:4px; }
+.cam-rename-btn { background:none; border:none; cursor:pointer; color:var(--muted); padding:2px; display:flex; align-items:center; opacity:0; transition:opacity .15s; }
+.cam-card:hover .cam-rename-btn { opacity:1; }
+.cam-rename-btn:hover { color:var(--accent); }
+.cam-rename-input { font-size:12px; font-weight:600; color:var(--text); background:var(--bg); border:1px solid var(--accent); border-radius:4px; padding:1px 6px; outline:none; width:140px; box-shadow:0 0 0 2px rgba(37,99,235,.15); }
 
 .cam-right { overflow-y:auto; padding:28px 32px; display:flex; flex-direction:column; }
 .cam-config-empty { flex:1; display:flex; flex-direction:column; align-items:center; justify-content:center; text-align:center; gap:10px; padding:40px; }
@@ -253,7 +258,15 @@ function renderConnected(){
     return`<div class="cam-card" onclick="editConnected(${i})">
       <div class="cam-card-dot green"></div>
       <div class="cam-brand-icon" style="background:${color};width:26px;height:26px;font-size:9px;">${ini}</div>
-      <div class="cam-card-info"><div class="cam-card-name">${c.name}</div><div class="cam-card-sub">${c.ip||'—'}:${c.port||554}</div></div>
+      <div class="cam-card-info">
+        <div class="cam-card-name-row">
+          <span class="cam-card-name" id="cam-name-${c.id}">${c.name}</span>
+          <button class="cam-rename-btn" onclick="event.stopPropagation();startRename(${c.id},${JSON.stringify(c.name)})" title="Rename">
+            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+          </button>
+        </div>
+        <div class="cam-card-sub">${c.brand||'Camera'} &bull; ${c.ip||'\u2014'}:${c.port||554}</div>
+      </div>
       <button class="cam-card-remove" onclick="event.stopPropagation();removeCamera(${c.id})" title="Remove">&#x2715;</button>
     </div>`;
   }).join('');
@@ -421,6 +434,39 @@ function clearPreview(){
   if(previewStopTimer){clearTimeout(previewStopTimer);previewStopTimer=null;}
   document.getElementById('cam-preview-inner').innerHTML='<div class="cam-preview-placeholder"><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="opacity:.3"><path d="M15 10l4.553-2.069A1 1 0 0121 8.87V15.13a1 1 0 01-1.447.9L15 14M3 8a2 2 0 012-2h10a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2V8z"/></svg><span>No preview</span></div>';
 }
+function startRename(id, currentName){
+  const nameEl=document.getElementById('cam-name-'+id);
+  if(!nameEl)return;
+  const input=document.createElement('input');
+  input.value=currentName;
+  input.className='cam-rename-input';
+  input.onclick=e=>e.stopPropagation();
+  input.onkeydown=e=>{
+    if(e.key==='Enter'){e.preventDefault();saveRename(id,input.value);}
+    if(e.key==='Escape'){loadConnected();}
+  };
+  nameEl.parentNode.replaceChild(input,nameEl);
+  input.focus(); input.select();
+  input.onblur=()=>saveRename(id,input.value);
+}
+async function saveRename(id,newName){
+  newName=(newName||'').trim();
+  if(!newName){loadConnected();return;}
+  // Get existing camera data to preserve all fields on PUT
+  const cam=connectedCameras.find(c=>c.id===id);
+  if(!cam){loadConnected();return;}
+  try{
+    const r=await fetch('/api/local_cameras/'+id,{
+      method:'PUT',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({name:newName,brand:cam.brand||'',ip:cam.ip,port:cam.port||554,username:cam.username||'',password:cam.password||'',path:cam.path||''})
+    });
+    const data=await r.json();
+    if(data.success){await loadConnected();}
+    else{loadConnected();}
+  }catch(e){loadConnected();}
+}
+
 async function saveCamera(){
   const name=document.getElementById('f-name').value.trim();
   const ip=document.getElementById('f-ip').value.trim();

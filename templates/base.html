@@ -297,13 +297,19 @@
             let icon = cctvSvg;
             if (c.type === 'webcam') icon = webcamSvg;
             else if (c.type === 'local') icon = localSvg;
+            const sub = c.type === 'local'
+              ? `${c.brand ? c.brand + ' · ' : ''}${c.ip || ''}`
+              : (c.type === 'webcam' ? 'Built-in / USB' : '');
             return `
         <div class="cam-item ${c.id === activeCamId ? 'active' : ''}"
              id="cam-${c.id}" onclick="selectCamera('${c.id}','${c.name}')">
           <div class="cam-icon">${icon}</div>
           <div class="cam-info">
             <div class="cam-name">${c.name}</div>
-            <div class="cam-status"><span class="dot ${dot}"></span>${c.status || 'Available'}</div>
+            <div class="cam-status">
+              <span class="dot ${dot}"></span>
+              ${sub || c.status || 'Available'}
+            </div>
           </div>
           ${c.id === activeCamId ? '<div class="active-indicator"></div>' : ''}
         </div>`;
