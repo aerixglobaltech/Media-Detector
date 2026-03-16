@@ -273,23 +273,35 @@ def _detect_onvif_cameras() -> list[dict]:
         sock.sendto(probe, (_ONVIF_DISCOVERY_ADDR, _ONVIF_DISCOVERY_PORT))
         while (time.time() - start) < _ONVIF_DISCOVERY_TIMEOUT:
             try:
-                data, _ = sock.recvfrom(65535)
+                data, addr = sock.recvfrom(65535)
             except socket.timeout:
                 break
             except OSError:
                 break
 
+            sender_ip = addr[0] if addr else None
             text = data.decode("utf-8", errors="ignore")
             xaddrs = _extract_xaddrs(text)
-            if not xaddrs:
+
+            # Prefer the actual UDP sender IP over whatever is advertised in
+            # the XAddr XML field — cameras often advertise a stale/wrong IP
+            # (old static assignment, secondary NIC, factory default) in their
+            # ONVIF payload while the packet correctly arrives from the real IP.
+            xaddr_host = _host_from_url(xaddrs[0]) if xaddrs else None
+            host = sender_ip if (sender_ip and _is_private_ipv4(sender_ip)) else xaddr_host
+            if not host:
                 continue
-            host = _host_from_url(xaddrs[0])
-            key = host or xaddrs[0]
-            parsed = urlparse(xaddrs[0])
-            onvif_port = parsed.port or (443 if parsed.scheme == "https" else 80)
+
+            # Still extract the ONVIF port from the XAddr URL if available
+            onvif_port = 80
+            if xaddrs:
+                parsed = urlparse(xaddrs[0])
+                onvif_port = parsed.port or (443 if parsed.scheme == "https" else 80)
+
+            key = host
             responses[key] = {
                 "id": f"det_onvif_{key.replace(':', '_')}",
-                "name": f"ONVIF Camera ({host or 'Unknown Host'})",
+                "name": f"ONVIF Camera ({host})",
                 "type": "network",
                 "source": "onvif",
                 "ip": host,
@@ -297,6 +309,7 @@ def _detect_onvif_cameras() -> list[dict]:
                 "onvif_port": onvif_port,
                 "protocol": "onvif",
                 "xaddrs": xaddrs,
+                "xaddr_ip": xaddr_host,   # kept for reference/debugging
                 "status": "🟢 Discovered",
             }
     finally:
