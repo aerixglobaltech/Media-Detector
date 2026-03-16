@@ -219,7 +219,7 @@ def init_db() -> None:
             )
         """)
 
-        # Attendance Table
+        # Attendance Table (daily summary — one row per person per day)
         cur.execute("""
             CREATE TABLE IF NOT EXISTS attendance (
                 id SERIAL PRIMARY KEY,
@@ -227,9 +227,55 @@ def init_db() -> None:
                 status VARCHAR(10) NOT NULL CHECK (status IN ('IN', 'OUT')),
                 in_time TIMESTAMP,
                 out_time TIMESTAMP,
-                timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                date DATE DEFAULT CURRENT_DATE,
+                first_in TIMESTAMP,
+                last_out TIMESTAMP,
+                total_duration_minutes INTEGER DEFAULT 0,
+                movement_count INTEGER DEFAULT 0,
+                day_status VARCHAR(10) DEFAULT 'open' CHECK (day_status IN ('open', 'closed'))
             )
         """)
+
+        # Alter existing attendance table to add new columns if upgrading
+        for col_sql in [
+            "ALTER TABLE attendance ADD COLUMN IF NOT EXISTS date DATE DEFAULT CURRENT_DATE",
+            "ALTER TABLE attendance ADD COLUMN IF NOT EXISTS first_in TIMESTAMP",
+            "ALTER TABLE attendance ADD COLUMN IF NOT EXISTS last_out TIMESTAMP",
+            "ALTER TABLE attendance ADD COLUMN IF NOT EXISTS total_duration_minutes INTEGER DEFAULT 0",
+            "ALTER TABLE attendance ADD COLUMN IF NOT EXISTS movement_count INTEGER DEFAULT 0",
+            "ALTER TABLE attendance ADD COLUMN IF NOT EXISTS day_status VARCHAR(10) DEFAULT 'open'",
+        ]:
+            try:
+                cur.execute(col_sql)
+            except Exception:
+                pass
+
+        # Movement Log Table (every individual IN/OUT event)
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS movement_log (
+                id SERIAL PRIMARY KEY,
+                staff_id INTEGER NOT NULL REFERENCES staff_profiles(id) ON DELETE CASCADE,
+                event_type VARCHAR(3) NOT NULL CHECK (event_type IN ('IN', 'OUT')),
+                timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                camera_name VARCHAR(255),
+                session_date DATE DEFAULT CURRENT_DATE
+            )
+        """)
+        cur.execute("CREATE INDEX IF NOT EXISTS idx_movement_log_staff_date ON movement_log(staff_id, session_date)")
+        cur.execute("CREATE INDEX IF NOT EXISTS idx_attendance_staff_date ON attendance(staff_id, date)")
+        cur.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_attendance_staff_date_unique ON attendance(staff_id, date)")
+
+        # Seed attendance settings defaults
+        for key, val in [
+            ('attendance_exit_timeout_mins', '5'),
+            ('attendance_eod_hour', '19'),
+            ('attendance_notify_exit', 'true'),
+        ]:
+            cur.execute(
+                "INSERT INTO system_settings (key, value) VALUES (%s, %s) ON CONFLICT (key) DO NOTHING",
+                (key, val)
+            )
 
         # Member Time Stamp Table (Forensic Entry/Exit Logging)
         cur.execute("""

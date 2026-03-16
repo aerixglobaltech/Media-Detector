@@ -49,7 +49,7 @@ from app.services.ai.motion_detection import MotionDetector
 from app.services.ai.notifier import TelegramNotifier
 from app.services.ai.object_detection import PersonDetector
 from app.services.ai.tracking import PersonTracker
-from app.services.attendance_service import mark_attendance
+from app.services.attendance_tracker import AttendanceTracker
 
 log = logging.getLogger("pipeline")
 
@@ -128,10 +128,9 @@ class AIPipeline(threading.Thread):
 
         from app.services.ai.notifier import TelegramNotifier
         self.notifier = TelegramNotifier()
-        self._notified_identities:  set[int] = set()
-        # Track which track IDs have already had attendance marked this session
-        # to avoid duplicate IN entries on every frame
-        self._attendance_marked: set[int] = set()
+        self._notified_identities: set[int] = set()
+        # Smart attendance tracker — handles IN/OUT cycles, movement log, EOD
+        self.attendance_tracker = AttendanceTracker(notifier=self.notifier)
 
         self._frame_idx        = 0
         self._last_detections: list = []
@@ -476,17 +475,15 @@ class AIPipeline(threading.Thread):
                     identity = cached_identity
                     
                     try:
-                        if identity and identity != "Unknown" and tid not in self._notified_identities:
-                            self.notifier.send_message(f"✅ *MATCH DETECTED*: Staff member **{identity}** recognized on {self.camera_name}.")
-                            self._notified_identities.add(tid)
-                            # Mark attendance IN for this staff member (once per track session)
-                            if tid not in self._attendance_marked:
-                                try:
-                                    mark_attendance(employee_name=identity, phone_number="", status="IN")
-                                    self._attendance_marked.add(tid)
-                                    log.info("Attendance IN marked for: %s (track_id=%d)", identity, tid)
-                                except Exception as att_err:
-                                    log.warning("Attendance mark failed for %s: %s", identity, att_err)
+                        if identity and identity != "Unknown":
+                            # Heartbeat to attendance tracker — handles IN/OUT/EOD automatically
+                            try:
+                                self.attendance_tracker.heartbeat(identity, self.camera_name)
+                            except Exception as att_err:
+                                log.warning("Attendance heartbeat failed for %s: %s", identity, att_err)
+                            # First-sighting Telegram match notification (once per track)
+                            if tid not in self._notified_identities:
+                                self._notified_identities.add(tid)
                         
                         is_unknown = (cached_identity == "" or cached_identity == "Unknown")
                         active_rec_tasks = sum(1 for f in self._rec_futures.values() if not f.done())
@@ -515,7 +512,6 @@ class AIPipeline(threading.Thread):
                 for tid in list(self._notified_identities):
                     if tid not in active_ids:
                         self._notified_identities.discard(tid)
-                        self._attendance_marked.discard(tid)
                 if len(self._seen_ids) > 1000:
                     self._seen_ids = self._seen_ids.intersection(active_ids)
 

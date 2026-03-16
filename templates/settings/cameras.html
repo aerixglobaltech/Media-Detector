@@ -128,6 +128,66 @@
       </div>
     </div>
 
+
+
+  <!-- ── Attendance Behaviour Settings ──────────────────────── -->
+  <div class="att-settings-panel">
+    <div class="att-settings-header">
+      <div>
+        <div class="att-settings-title">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87"/><path d="M16 3.13a4 4 0 010 7.75"/></svg>
+          Attendance Behaviour
+        </div>
+        <div class="att-settings-sub">Controls how entry/exit and end-of-day are detected</div>
+      </div>
+      <button class="cam-btn-primary" style="padding:8px 16px;font-size:12px;" onclick="saveAttendanceSettings()">Save</button>
+    </div>
+    <div class="att-fields">
+
+      <div class="att-field">
+        <label class="cam-label">Exit Timeout</label>
+        <div class="att-select-wrap">
+          <select id="att-exit-timeout" class="att-select">
+            <option value="2">2 minutes</option>
+            <option value="5" selected>5 minutes</option>
+            <option value="10">10 minutes</option>
+            <option value="15">15 minutes</option>
+            <option value="30">30 minutes</option>
+          </select>
+        </div>
+        <div class="att-field-hint">How long after disappearing from camera before marking OUT</div>
+      </div>
+
+      <div class="att-field">
+        <label class="cam-label">End of Day Hour</label>
+        <div class="att-select-wrap">
+          <select id="att-eod-hour" class="att-select">
+            <option value="17">5:00 PM</option>
+            <option value="18">6:00 PM</option>
+            <option value="19" selected>7:00 PM</option>
+            <option value="20">8:00 PM</option>
+            <option value="21">9:00 PM</option>
+            <option value="0">Midnight (disabled)</option>
+          </select>
+        </div>
+        <div class="att-field-hint">After this hour, last exit is treated as end of day</div>
+      </div>
+
+      <div class="att-field">
+        <label class="cam-label">Exit Notifications</label>
+        <div class="att-toggle-row">
+          <label class="att-toggle">
+            <input type="checkbox" id="att-notify-exit" checked>
+            <span class="att-toggle-track"></span>
+          </label>
+          <span class="att-toggle-label" id="att-notify-exit-label">Enabled</span>
+        </div>
+        <div class="att-field-hint">Send Telegram alert when a person exits</div>
+      </div>
+
+    </div>
+  </div>
+
   </div>
 </div>
 
@@ -218,6 +278,42 @@
 .cam-btn-secondary:hover { border-color:var(--accent); color:var(--accent); }
 .cam-btn-primary { display:flex; align-items:center; justify-content:center; gap:7px; padding:11px; border:none; border-radius:8px; background:var(--accent); color:white; font-size:13px; font-weight:700; cursor:pointer; transition:opacity .15s; }
 .cam-btn-primary:hover { opacity:.88; }
+.att-settings-panel {
+  background:var(--surface); border:1px solid var(--border); border-radius:14px;
+  padding:22px 28px; margin-top:24px; box-shadow:var(--shadow-sm);
+}
+.att-settings-header {
+  display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:20px;
+}
+.att-settings-title {
+  font-size:14px; font-weight:800; color:var(--text);
+  display:flex; align-items:center; gap:7px;
+}
+.att-settings-sub { font-size:12px; color:var(--muted); margin-top:3px; }
+.att-fields { display:grid; grid-template-columns:1fr 1fr 1fr; gap:20px; }
+.att-field { display:flex; flex-direction:column; gap:6px; }
+.att-select-wrap { position:relative; }
+.att-select {
+  width:100%; padding:9px 12px; border:1px solid var(--border); border-radius:7px;
+  font-size:13px; outline:none; background:var(--bg); color:var(--text);
+  appearance:none; cursor:pointer; transition:border-color .15s;
+}
+.att-select:focus { border-color:var(--accent); box-shadow:0 0 0 3px rgba(37,99,235,.1); }
+.att-field-hint { font-size:11px; color:var(--muted); line-height:1.4; }
+.att-toggle-row { display:flex; align-items:center; gap:10px; padding:6px 0; }
+.att-toggle { position:relative; display:inline-block; width:40px; height:22px; flex-shrink:0; }
+.att-toggle input { opacity:0; width:0; height:0; }
+.att-toggle-track {
+  position:absolute; cursor:pointer; inset:0; background:var(--border);
+  border-radius:22px; transition:.2s;
+}
+.att-toggle-track::before {
+  content:''; position:absolute; height:16px; width:16px; left:3px; bottom:3px;
+  background:white; border-radius:50%; transition:.2s;
+}
+.att-toggle input:checked + .att-toggle-track { background:var(--accent); }
+.att-toggle input:checked + .att-toggle-track::before { transform:translateX(18px); }
+.att-toggle-label { font-size:12px; font-weight:600; color:var(--text); }
 </style>
 
 <script>
@@ -243,7 +339,7 @@ function getRtspPath(b){const k=(b||'').toLowerCase();for(const[key,v] of Object
 
 let detectedCameras=[],connectedCameras=[],editingCameraId=null,activeCardEl=null,previewStopTimer=null;
 
-document.addEventListener('DOMContentLoaded',()=>{ loadConnected(); });
+
 
 async function loadConnected(){
   try{ const r=await fetch('/api/local_cameras'); connectedCameras=await r.json(); }catch(e){ connectedCameras=[]; }
@@ -482,6 +578,57 @@ async function saveCamera(){
     if(data.success){await loadConnected();closeConfig();}
     else alert('Save failed: '+(data.error||'Unknown error'));
   }catch(e){alert('Save failed.');}
+
+// ── Attendance settings ─────────────────────────────────────────────────────
+async function loadAttendanceSettings(){
+  try{
+    const r=await fetch('/api/system_settings');
+    const s=await r.json();
+    const exitSel=document.getElementById('att-exit-timeout');
+    const eodSel=document.getElementById('att-eod-hour');
+    const notifyChk=document.getElementById('att-notify-exit');
+    if(s.attendance_exit_timeout_mins&&exitSel){
+      exitSel.value=s.attendance_exit_timeout_mins;
+    }
+    if(s.attendance_eod_hour&&eodSel){
+      eodSel.value=s.attendance_eod_hour;
+    }
+    if(s.attendance_notify_exit!==undefined&&notifyChk){
+      notifyChk.checked=s.attendance_notify_exit==='true';
+      document.getElementById('att-notify-exit-label').textContent=notifyChk.checked?'Enabled':'Disabled';
+    }
+    if(notifyChk){
+      notifyChk.addEventListener('change',()=>{
+        document.getElementById('att-notify-exit-label').textContent=notifyChk.checked?'Enabled':'Disabled';
+      });
+    }
+  }catch(e){console.warn('Could not load attendance settings',e);}
+}
+
+async function saveAttendanceSettings(){
+  const payload={
+    attendance_exit_timeout_mins:document.getElementById('att-exit-timeout').value,
+    attendance_eod_hour:document.getElementById('att-eod-hour').value,
+    attendance_notify_exit:document.getElementById('att-notify-exit').checked?'true':'false',
+  };
+  try{
+    const r=await fetch('/api/system_settings',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
+    const d=await r.json();
+    if(d.success){
+      const btn=document.querySelector('.att-settings-panel .cam-btn-primary');
+      const orig=btn.textContent;
+      btn.textContent='\u2713 Saved';
+      btn.style.background='var(--green)';
+      setTimeout(()=>{btn.textContent=orig;btn.style.background='';},2000);
+    }
+  }catch(e){alert('Save failed');}
+}
+
+document.addEventListener('DOMContentLoaded',()=>{
+  loadConnected();
+  loadAttendanceSettings();
+});
+
 }
 </script>
 {% endblock %}
