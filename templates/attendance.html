@@ -25,7 +25,11 @@
           <button class="att-view-tab active" id="tab-events" onclick="switchView('events')">Events</button>
           <button class="att-view-tab" id="tab-forensics" onclick="switchView('forensics')">📸 Forensic Images</button>
         </div>
-        <button class="secondary-btn" onclick="exportAttendance('excel')"><span>📥</span> Export</button>
+        <button class="att-btn att-btn-secondary" onclick="exportAttendance()">📥 Export</button>
+      <button id="instant-mark-btn" class="att-btn" style="background: var(--accent2); color: white;" onclick="instantMarkAttendance()">
+        📸 Instant Mark
+      </button>
+      <div id="instant-mark-loading" class="att-spinner" style="display: none; width: 20px; height: 20px; margin-left: 8px;"></div>
       </div>
     </div>
 
@@ -77,7 +81,7 @@
           </thead>
           <tbody id="attendance-table-body">
             <tr>
-              <td colspan="7" class="att-empty">Loading attendance records...</td>
+              <td colspan="9" class="att-empty">Loading attendance records...</td>
             </tr>
           </tbody>
         </table>
@@ -857,46 +861,28 @@
   function renderAttendanceRows(records) {
     const tbody = document.getElementById('attendance-table-body');
     if (!records || !records.length) {
-      tbody.innerHTML = '<tr><td colspan="7" class="att-empty">No attendance records found.</td></tr>';
+      tbody.innerHTML = '<tr><td colspan="9" class="att-empty">No attendance records found.</td></tr>';
       return;
     }
 
     tbody.innerHTML = records.map((r, idx) => {
       const payload = encodeURIComponent(JSON.stringify(r));
-      const menuId = `att-action-menu-${r.id || idx}`;
+      const statusClass = r.status === 'OUT' ? 'badge-out' : 'badge-in';
+      const statusText = r.status || 'PRESENT';
+
       return `
       <tr class="att-clickable-row" onclick="openAttDetailsFromPayload('${payload}')">
         <td class="att-td"><span style="font-family:monospace; font-weight:600; color:var(--accent);">${r.display_id || '-'}</span></td>
         <td class="att-td"><strong>${r.name || '-'}</strong><div style="font-size:11px; color:var(--muted);">${r.email || ''}</div></td>
         <td class="att-td">${fmtDateTime(r.in_time)}</td>
         <td class="att-td">${fmtDateTime(r.out_time)}</td>
-        <td class="att-td"><span class="badge-status badge-in">PRESENT</span></td>
+        <td class="att-td"><span class="badge-status ${statusClass}">${statusText}</span></td>
         <td class="att-td" style="white-space:nowrap;">${r.timestamp || '-'}</td>
-        <td class="att-td" style="text-align:center;" onclick="event.stopPropagation()">
-          <div class="att-action-menu">
-            <button class="att-actions-btn" onclick="toggleAttActionMenu(event, '${menuId}')">⋮</button>
-            <div id="${menuId}" class="att-action-dropdown">
-              <button class="att-action-item" onclick="event.stopPropagation(); openAttDetailsFromPayload('${payload}'); closeAttActionMenus();">Details</button>
-            </div>
-          </div>
-        </td>
-    tbody.innerHTML = records.map(r => `
-        < tr >
-        <td class="att-td">
-          <strong>${r.name || '-'}</strong>
-          <div style="font-size:11px; color:var(--muted);">${r.email || ''}</div>
-        </td>
-        <td class="att-td">
-          <span class="badge-status ${r.status === 'IN' ? 'badge-in' : 'badge-out'}">
-            ${r.status === 'IN' ? '🟢 IN' : '🔴 OUT'}
-          </span>
-        </td>
-        <td class="att-td" style="font-weight:600;">${fmtTime(r.timestamp)}</td>
-        <td class="att-td" style="font-size:12px; color:var(--muted);">${r.camera_name || '—'}</td>
+        <td class="att-td">${r.camera_name || '—'}</td>
         <td class="att-td">${r.phone || '-'}</td>
         <td class="att-td" style="font-size:12px; color:var(--muted);">${fmtDate(r.timestamp)}</td>
-      </tr >
-        `;
+      </tr>
+      `;
     }).join('');
   }
 
@@ -913,7 +899,7 @@
     params.set('page_size', String(attPageSize));
 
     const tbody = document.getElementById('attendance-table-body');
-    tbody.innerHTML = '<tr><td colspan="7" class="att-empty">Loading attendance records...</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="9" class="att-empty">Loading attendance records...</td></tr>';
 
     try {
       const res = await fetch('/api/attendance/records?' + params.toString());
@@ -925,7 +911,7 @@
       renderAttendanceRows(data.records || []);
       renderAttPagination((data.pagination && data.pagination.total_records) || 0);
     } catch (e) {
-      tbody.innerHTML = `< tr > <td colspan="7" class="att-empty" style="color: var(--red);">Failed to load attendance: ${e.message}</td></tr > `;
+      tbody.innerHTML = `<tr><td colspan="9" class="att-empty" style="color: var(--red);">Failed to load attendance: ${e.message}</td></tr>`;
       setSummary({ total_records: 0, total_in: 0, total_out: 0, today_total: 0 });
       renderAttPagination(0);
     }
@@ -1009,6 +995,40 @@
       </div>
         </div >`;
     }).join('');
+  }
+
+
+  async function instantMarkAttendance() {
+    const btn = document.getElementById('instant-mark-btn');
+    const loading = document.getElementById('instant-mark-loading');
+    
+    btn.disabled = true;
+    const oldText = btn.innerText;
+    btn.innerText = '⌛ Processing...';
+    loading.style.display = 'inline-block';
+
+    try {
+      const res = await fetch('/api/attendance/instant_mark', { method: 'POST' });
+      const data = await res.json();
+
+      if (data.success) {
+        showAttToast(`✅ ${data.message}`, 'success');
+        loadAttendance(); // Refresh table
+      } else {
+        showAttToast(`❌ ${data.error || 'Failed to mark attendance'}`, 'error');
+      }
+    } catch (e) {
+      showAttToast(`❌ Error: ${e.message}`, 'error');
+    } finally {
+      btn.disabled = false;
+      btn.innerText = oldText;
+      loading.style.display = 'none';
+    }
+  }
+
+  function showAttToast(msg, type = 'info') {
+    // Simple toast fallback until a better UI is requested
+    alert(msg);
   }
 
 

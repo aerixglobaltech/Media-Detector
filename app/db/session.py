@@ -222,45 +222,96 @@ def init_db() -> None:
             )
         """)
 
-        # Movement Log Table
+        # Movement Log Table (Matched to member_timestamp as requested)
         cur.execute("""
             CREATE TABLE IF NOT EXISTS movement_log (
                 id SERIAL PRIMARY KEY,
-                camera_id VARCHAR(50),
+                camera_id VARCHAR(100),
+                camera_name VARCHAR(100),
+                entry_image TEXT,
+                entry_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                exit_image TEXT,
+                exit_time TIMESTAMP,
+                merged_image TEXT,
                 image_path TEXT,
-                detected_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                detected_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                person_type VARCHAR(20),
+                staff_id INTEGER NULL REFERENCES staff_profiles(id),
+                staff_name VARCHAR(100),
+                confidence_score FLOAT
             )
         """)
+        
+        m_cols = [
+            ("camera_name", "VARCHAR(100)"),
+            ("camera_id", "VARCHAR(100)"),
+            ("entry_image", "TEXT"),
+            ("image_path", "TEXT"),
+            ("entry_time", "TIMESTAMP DEFAULT CURRENT_TIMESTAMP"),
+            ("detected_at", "TIMESTAMP DEFAULT CURRENT_TIMESTAMP"),
+            ("exit_image", "TEXT"),
+            ("exit_time", "TIMESTAMP"),
+            ("merged_image", "TEXT"),
+            ("person_type", "VARCHAR(20)"),
+            ("staff_id", "INTEGER"),
+            ("staff_name", "VARCHAR(100)"),
+            ("confidence_score", "FLOAT")
+        ]
+        for col, dtype in m_cols:
+            try:
+                cur.execute(f"ALTER TABLE movement_log ADD COLUMN IF NOT EXISTS {col} {dtype}")
+            except Exception:
+                conn.rollback()
+                cur = conn.cursor()
+        
         cur.execute("CREATE INDEX IF NOT EXISTS idx_movement_detected_at ON movement_log(detected_at)")
 
-        # Update: Revert to member_timestamp as requested by user
-        try:
-            cur.execute("ALTER TABLE member_time_stamp RENAME TO member_timestamp")
-            cur.execute("ALTER INDEX IF EXISTS idx_member_time_stamp_staff RENAME TO idx_member_timestamp_staff")
-            cur.execute("ALTER INDEX IF EXISTS idx_member_time_stamp_entry RENAME TO idx_member_timestamp_entry")
-            print(">>> RENAMED: member_time_stamp to member_timestamp")
-        except Exception:
-            conn.rollback()
-            cur = conn.cursor()
-
-        # Member Timestamp Table (Primary Detection & Forensic Log)
+        # Member Timestamp Table (Restoring rich forensics)
         cur.execute("""
             CREATE TABLE IF NOT EXISTS member_timestamp (
                 id SERIAL PRIMARY KEY,
-                person_id INTEGER,          -- track id
+                camera_id VARCHAR(100),
                 camera_name VARCHAR(100),
-                person_type VARCHAR(20),     -- staff / unknown
+                person_type VARCHAR(20),     
                 staff_id INTEGER NULL REFERENCES staff_profiles(id),
+                staff_name VARCHAR(100),
                 confidence_score FLOAT,
                 entry_image TEXT,
                 entry_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 exit_image TEXT,
                 exit_time TIMESTAMP,
-                merged_image TEXT
+                merged_image TEXT,
+                image_path TEXT,
+                detected_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
         """)
+        
+        # Ensure all columns exist to satisfy both legacy and newer code
+        cols = [
+            ("camera_name", "VARCHAR(100)"),
+            ("camera_id", "VARCHAR(100)"),
+            ("entry_image", "TEXT"),
+            ("image_path", "TEXT"),
+            ("entry_time", "TIMESTAMP DEFAULT CURRENT_TIMESTAMP"),
+            ("detected_at", "TIMESTAMP DEFAULT CURRENT_TIMESTAMP"),
+            ("exit_image", "TEXT"),
+            ("exit_time", "TIMESTAMP"),
+            ("merged_image", "TEXT"),
+            ("person_type", "VARCHAR(20)"),
+            ("staff_id", "INTEGER"),
+            ("staff_name", "VARCHAR(100)"),
+            ("confidence_score", "FLOAT")
+        ]
+        for col, dtype in cols:
+            try:
+                cur.execute(f"ALTER TABLE member_timestamp ADD COLUMN IF NOT EXISTS {col} {dtype}")
+            except Exception:
+                conn.rollback()
+                cur = conn.cursor()
+
         cur.execute("CREATE INDEX IF NOT EXISTS idx_member_timestamp_staff ON member_timestamp(staff_id)")
         cur.execute("CREATE INDEX IF NOT EXISTS idx_member_timestamp_entry ON member_timestamp(entry_time)")
+        cur.execute("CREATE INDEX IF NOT EXISTS idx_member_timestamp_detected ON member_timestamp(detected_at)")
 
         # Mandatory updates for legacy table if it already exists
         try:
@@ -276,12 +327,14 @@ def init_db() -> None:
             CREATE TABLE IF NOT EXISTS attendance (
                 id SERIAL PRIMARY KEY,
                 staff_id INTEGER REFERENCES staff_profiles(id) ON DELETE CASCADE,
+                staff_name VARCHAR(100),
                 attendance_date DATE NOT NULL,
                 first_entry_time TIMESTAMP,
                 last_exit_time TIMESTAMP,
                 status VARCHAR(10),
                 in_time TIMESTAMP,
                 out_time TIMESTAMP,
+                entry_image TEXT,
                 in_image TEXT,
                 out_image TEXT,
                 movement_count INTEGER DEFAULT 0,
@@ -298,6 +351,8 @@ def init_db() -> None:
             cur.execute("ALTER TABLE attendance ADD COLUMN IF NOT EXISTS status VARCHAR(10)")
             cur.execute("ALTER TABLE attendance ADD COLUMN IF NOT EXISTS in_time TIMESTAMP")
             cur.execute("ALTER TABLE attendance ADD COLUMN IF NOT EXISTS out_time TIMESTAMP")
+            cur.execute("ALTER TABLE attendance ADD COLUMN IF NOT EXISTS staff_name VARCHAR(100)")
+            cur.execute("ALTER TABLE attendance ADD COLUMN IF NOT EXISTS entry_image TEXT")
             cur.execute("ALTER TABLE attendance ADD COLUMN IF NOT EXISTS day_status VARCHAR(20) DEFAULT 'open'")
             cur.execute("ALTER TABLE attendance ADD COLUMN IF NOT EXISTS movement_count INTEGER DEFAULT 0")
             cur.execute("ALTER TABLE attendance ADD COLUMN IF NOT EXISTS total_duration_minutes INTEGER DEFAULT 0")
@@ -384,6 +439,17 @@ def init_db() -> None:
             except Exception:
                 conn.rollback()
                 cur = conn.cursor()
+            # Ensure staff_name exists in both tables
+            for table in ["member_timestamp", "movement_log"]:
+                cur.execute(f"ALTER TABLE {table} ADD COLUMN IF NOT EXISTS staff_name VARCHAR(100)")
+            
+            # Remove person_id if it exists (cleanup)
+            for table in ["member_timestamp", "movement_log"]:
+                try: cur.execute(f"ALTER TABLE {table} DROP COLUMN IF EXISTS person_id")
+                except: conn.rollback(); cur = conn.cursor()
+
+            conn.commit()
+            log.info("Forced forensic schema updates applied.")
         except Exception as e:
             log.warning(f"Schema update minor error: {e}")
 

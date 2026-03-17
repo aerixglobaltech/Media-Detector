@@ -33,6 +33,9 @@ import shutil
 from flask import Blueprint, jsonify, request, session, url_for
 from werkzeug.utils import secure_filename
 from datetime import datetime
+import cv2
+import numpy as np
+import io
 
 from app.core.security import login_required
 from app.db.session import get_db_connection
@@ -860,8 +863,7 @@ def api_staff_export():
 @api_bp.route("/api/attendance/records", methods=["GET"])
 @login_required
 def api_attendance_records():
-    """Return attendance records from movement_log (individual IN/OUT events)."""
-    status = (request.args.get("status") or "").strip().upper()
+    """Return attendance records from compiled attendance table."""
     q = (request.args.get("q") or "").strip()
     date_from = (request.args.get("date_from") or "").strip()
     date_to = (request.args.get("date_to") or "").strip()
@@ -883,7 +885,6 @@ def api_attendance_records():
     where = []
     params = []
 
-    # Status filtering removed as it's no longer used in the new schema
     if period == "today":
         where.append("a.attendance_date = CURRENT_DATE")
     else:
@@ -896,9 +897,9 @@ def api_attendance_records():
     if q:
         like = f"%{q}%"
         where.append(
-            "(COALESCE(s.name,'') ILIKE %s OR COALESCE(s.email,'') ILIKE %s OR COALESCE(s.phone,'') ILIKE %s)"
+            "(COALESCE(s.name,'') ILIKE %s OR COALESCE(s.email,'') ILIKE %s OR COALESCE(s.phone,'') ILIKE %s OR COALESCE(s.staff_id,'') ILIKE %s)"
         )
-        params.extend([like, like, like])
+        params.extend([like, like, like, like])
 
     where_sql = f"WHERE {' AND '.join(where)}" if where else ""
 
@@ -907,12 +908,12 @@ def api_attendance_records():
         conn = get_db_connection()
         cur = conn.cursor()
 
-        # Count — from movement_log (individual events)
+        # Count — from attendance table
         cur.execute(
             f"""
             SELECT COUNT(*)::int AS total_records
-            FROM movement_log m
-            LEFT JOIN staff_profiles s ON s.id = m.staff_id
+            FROM attendance a
+            LEFT JOIN staff_profiles s ON s.id = a.staff_id
             {where_sql}
             """,
             tuple(params),
@@ -920,43 +921,42 @@ def api_attendance_records():
         count_row = cur.fetchone() or {}
         total_records = count_row.get("total_records", 0) or 0
 
-        # Records — individual IN/OUT events from movement_log
+        # Records — aggregate session records from attendance table
         cur.execute(
             f"""
             SELECT
-                m.id,
-                m.staff_id,
+                a.id,
+                a.staff_id as db_id,
+                s.staff_id as display_id,
                 COALESCE(s.name,  '-') AS name,
                 COALESCE(s.email, '')  AS email,
                 COALESCE(s.phone, '')  AS phone,
-                m.event_type           AS status,
-                CASE WHEN m.event_type = 'IN'  THEN m.timestamp ELSE NULL END AS in_time,
-                CASE WHEN m.event_type = 'OUT' THEN m.timestamp ELSE NULL END AS out_time,
-                m.timestamp,
-                m.camera_name
-            FROM movement_log m
-            LEFT JOIN staff_profiles s ON s.id = m.staff_id
+                a.status,
+                a.first_entry_time     AS in_time,
+                a.last_exit_time       AS out_time,
+                a.timestamp
+            FROM attendance a
+            LEFT JOIN staff_profiles s ON s.id = a.staff_id
             {where_sql}
-            ORDER BY m.attendance_date DESC, a.first_entry_time DESC
+            ORDER BY a.attendance_date DESC, a.first_entry_time DESC
             LIMIT %s OFFSET %s
             """,
             tuple(params + [page_size, offset]),
         )
         rows = cur.fetchall()
 
-        # Summary — aggregate from movement_log
+        # Summary — aggregate from attendance table
         cur.execute(
             f"""
             SELECT
                 COUNT(*)::int AS total_records,
-                SUM(CASE WHEN m.event_type = 'IN'  THEN 1 ELSE 0 END)::int AS total_in,
-                SUM(CASE WHEN m.event_type = 'OUT' THEN 1 ELSE 0 END)::int AS total_out,
-                SUM(CASE WHEN m.timestamp::date = CURRENT_DATE THEN 1 ELSE 0 END)::int AS today_total
-            FROM movement_log m
-            LEFT JOIN staff_profiles s ON s.id = m.staff_id
+                COUNT(DISTINCT a.staff_id)::int AS total_present,
+                SUM(CASE WHEN a.attendance_date = CURRENT_DATE THEN 1 ELSE 0 END)::int AS today_total
+            FROM attendance a
+            LEFT JOIN staff_profiles s ON s.id = a.staff_id
             {where_sql}
             """,
-            tuple(params[:len(where)] + [datetime.now().date()]),
+            tuple(params),
         )
         summary = cur.fetchone() or {}
 
@@ -964,14 +964,15 @@ def api_attendance_records():
         for r in rows:
             formatted_records.append({
                 "id": r["id"],
-                "staff_id": r["staff_id"],
+                "staff_id": r["db_id"],
+                "display_id": r["display_id"],
                 "name": r["name"],
                 "email": r["email"],
                 "phone": r["phone"],
-                "in_time": r["in_time"],
-                "out_time": r["out_time"],
-                "timestamp": r["timestamp"].strftime("%Y-%m-%d") if hasattr(r["timestamp"], "strftime") else str(r["timestamp"]),
-                "display_id": r["display_id"]
+                "status": r["status"],
+                "in_time": r["in_time"].strftime("%Y-%m-%d %H:%M:%S") if r["in_time"] else "-",
+                "out_time": r["out_time"].strftime("%Y-%m-%d %H:%M:%S") if r["out_time"] else "-",
+                "timestamp": r["timestamp"].strftime("%Y-%m-%d") if hasattr(r["timestamp"], "strftime") else str(r["timestamp"])
             })
 
         return jsonify(
@@ -980,7 +981,7 @@ def api_attendance_records():
                 "records": formatted_records,
                 "summary": {
                     "total_records": summary.get("total_records", 0) or 0,
-                    "total_staff": summary.get("total_staff_present", 0) or 0,
+                    "total_staff": summary.get("total_present", 0) or 0,
                     "today_total": summary.get("today_total", 0) or 0,
                 },
                 "pagination": {
@@ -1000,6 +1001,76 @@ def api_attendance_records():
             conn.close()
 
 
+@api_bp.route("/api/attendance/instant_mark", methods=["POST"])
+@login_required
+def api_attendance_instant_mark():
+    """Capture a frame from the webcam and mark attendance if a staff member is recognized."""
+    try:
+        # 1. Get current frame from cam_mgr
+        jpeg_bytes = cam_mgr.get_jpeg()
+        if not jpeg_bytes:
+            return jsonify({"success": False, "error": "No camera stream active"}), 400
+
+        # 2. Decode JPEG to image array
+        nparr = np.frombuffer(jpeg_bytes, np.uint8)
+        frame = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
+        if frame is None:
+            return jsonify({"success": False, "error": "Failed to decode camera frame"}), 500
+
+        # 3. Get FaceRecognizer from AI Pipeline
+        face_rec = None
+        if hasattr(cam_mgr, "_pipeline") and cam_mgr._pipeline:
+            face_rec = cam_mgr._pipeline.face_rec
+        
+        if not face_rec:
+             return jsonify({"success": False, "error": "AI Pipeline or Face Recognition not initialized"}), 500
+
+        if not hasattr(face_rec, "_available") or not face_rec._available:
+             return jsonify({"success": False, "error": "Face Recognition engine (DeepFace) is missing or disabled"}), 503
+
+        # 4. Run recognition on the full frame
+        # (We use a dummy track_id -999 for manual capture)
+        res = face_rec.recognize(frame, track_id=-999)
+        
+        name = res.get("name", "Unknown")
+        staff_id = res.get("id")
+
+        if name == "Unknown" or not staff_id:
+            return jsonify({"success": False, "error": "No recognized staff member found in frame"}), 404
+
+        # 5. Save the image first
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        filename = f"manual_mark_{name.replace(' ', '_')}_{timestamp}.jpg"
+        static_uploads = os.path.join("static", "uploads", "movement")
+        os.makedirs(static_uploads, exist_ok=True)
+        cv2.imwrite(os.path.join(static_uploads, filename), frame)
+        img_url = f"static/uploads/movement/{filename}"
+
+        # 6. Flow Step 1: Log to movement_log
+        from app.services.attendance_service import log_movement, log_person, track_staff_attendance
+        camera_name = getattr(getattr(cam_mgr, "_pipeline", None), "camera_name", "Camera")
+        log_movement(camera_name, img_url)
+
+        # 7. Flow Step 2: Log to member_timestamp for forensics
+        log_person(camera_name, "staff", staff_id, img_url, 1.0, staff_name=name)
+
+        # 8. Flow Step 3: Mark official Attendance
+        track_staff_attendance(staff_id, staff_name=name, entry_image=img_url)
+
+        log.info("MANUAL ATTENDANCE CHAIN COMPLETE: %s", name)
+        
+        return jsonify({
+            "success": True, 
+            "message": f"Successfully marked attendance for {name}",
+            "name": name,
+            "staff_id": staff_id
+        })
+
+    except Exception as e:
+        log.error("Error in instant_mark: %s", e)
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
 @api_bp.route("/api/attendance/forensics", methods=["GET"])
 @login_required
 def api_attendance_forensics():
@@ -1011,13 +1082,13 @@ def api_attendance_forensics():
     where = []
     params = []
     if staff_name:
-        where.append("m.staff_name ILIKE %s")
+        where.append("s.name ILIKE %s")
         params.append(f"%{staff_name}%")
     if date_str:
-        where.append("m.entry_time::date = %s::date")
+        where.append("m.detected_at::date = %s::date")
         params.append(date_str)
     else:
-        where.append("m.entry_time::date = CURRENT_DATE")
+        where.append("m.detected_at::date = CURRENT_DATE")
 
     where_sql = "WHERE " + " AND ".join(where) if where else "WHERE m.entry_time::date = CURRENT_DATE"
 
@@ -1027,21 +1098,20 @@ def api_attendance_forensics():
         cur.execute(f"""
             SELECT
                 m.id,
-                m.person_id,
                 m.staff_id,
-                m.staff_name,
-                m.camera_name,
+                COALESCE(s.name, 'Unknown') as staff_name,
+                m.camera_id as camera_name,
                 m.entry_image,
-                m.exit_image,
-                m.merged_image,
                 m.entry_time,
+                m.exit_image,
                 m.exit_time,
+                m.merged_image,
                 COALESCE(s.email, '') AS email,
                 COALESCE(s.phone, '') AS phone
-            FROM member_time_stamp m
+            FROM member_timestamp m
             LEFT JOIN staff_profiles s ON s.id = m.staff_id
             {where_sql}
-            ORDER BY m.entry_time DESC
+            ORDER BY m.detected_at DESC
             LIMIT %s
         """, tuple(params + [limit]))
         rows = cur.fetchall()
@@ -1051,7 +1121,7 @@ def api_attendance_forensics():
         def img_url(filename):
             if not filename:
                 return None
-            return f"/static/uploads/snapshots/{filename}"
+            return f"/{filename}" if str(filename).startswith("static/") else f"/static/uploads/snapshots/{filename}"
 
         records = []
         for r in rows:
@@ -1061,8 +1131,8 @@ def api_attendance_forensics():
                 "email":       r["email"],
                 "phone":       r["phone"],
                 "camera_name": r["camera_name"],
-                "entry_time":  r["entry_time"].isoformat() if r["entry_time"] else None,
-                "exit_time":   r["exit_time"].isoformat()  if r["exit_time"]  else None,
+                "entry_time":  r["entry_time"].strftime("%Y-%m-%d %H:%M:%S") if r["entry_time"] else None,
+                "exit_time":   r["exit_time"].strftime("%Y-%m-%d %H:%M:%S")  if r["exit_time"]  else None,
                 "entry_image": img_url(r["entry_image"]),
                 "exit_image":  img_url(r["exit_image"]),
                 "merged_image":img_url(r["merged_image"]),
@@ -1113,18 +1183,18 @@ def api_attendance_export():
         cur.execute(
             f"""
             SELECT
+                a.attendance_date,
+                s.staff_id as display_id,
                 COALESCE(s.name,  '-') AS name,
                 COALESCE(s.email, '')  AS email,
                 COALESCE(s.phone, '')  AS phone,
-                m.event_type           AS status,
-                CASE WHEN m.event_type = 'IN'  THEN m.timestamp ELSE NULL END AS in_time,
-                CASE WHEN m.event_type = 'OUT' THEN m.timestamp ELSE NULL END AS out_time,
-                m.timestamp,
-                m.camera_name
-            FROM movement_log m
-            LEFT JOIN staff_profiles s ON s.id = m.staff_id
+                a.status,
+                a.first_entry_time     AS in_time,
+                a.last_exit_time       AS out_time
+            FROM attendance a
+            LEFT JOIN staff_profiles s ON s.id = a.staff_id
             {where_sql}
-            ORDER BY m.attendance_date DESC, a.first_entry_time DESC
+            ORDER BY a.attendance_date DESC, a.first_entry_time DESC
             """,
             tuple(params),
         )
@@ -1139,9 +1209,18 @@ def api_attendance_export():
 
             output = io.StringIO()
             writer = csv.writer(output)
-            writer.writerow(["Member Name", "Email", "Phone", "First Entry", "Last Exit", "Date"])
+            writer.writerow(["Date", "Staff ID", "Member Name", "Email", "Phone", "Status", "First Entry", "Last Exit"])
             for r in rows:
-                writer.writerow([r["name"], r["email"], r["phone"], r["first_entry_time"], r["last_exit_time"], r["attendance_date"]])
+                writer.writerow([
+                    r["attendance_date"], 
+                    r["display_id"], 
+                    r["name"], 
+                    r["email"], 
+                    r["phone"], 
+                    r["status"], 
+                    r["in_time"].strftime("%H:%M:%S") if r["in_time"] else "-", 
+                    r["out_time"].strftime("%H:%M:%S") if r["out_time"] else "-"
+                ])
             return Response(
                 output.getvalue(),
                 mimetype="text/csv",
@@ -1154,7 +1233,7 @@ def api_attendance_export():
 
         df = pd.DataFrame(rows)
         if not df.empty:
-            df.columns = ["Name", "Email", "Phone", "First Entry", "Last Exit", "Date"]
+            df.columns = ["Date", "Staff ID", "Name", "Email", "Phone", "Status", "First Entry", "Last Exit"]
         output = io.BytesIO()
         with pd.ExcelWriter(output, engine="openpyxl") as writer:
             df.to_excel(writer, index=False, sheet_name="Attendance")

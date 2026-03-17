@@ -1,14 +1,81 @@
-from flask import Blueprint, jsonify, request, Response
+from flask import Blueprint, jsonify, request, Response, send_file
 from app.db.session import get_db_connection
 from datetime import date, datetime
 from app.core.security import login_required
 import csv
 import io
 import logging
+from pathlib import Path
+from urllib.parse import quote
 
 log = logging.getLogger("attendance_api")
 
 attendance_bp = Blueprint('attendance_api', __name__, url_prefix='/api')
+PROJECT_ROOT = Path(__file__).resolve().parents[3]
+STATIC_ROOT = (PROJECT_ROOT / "static").resolve()
+ALLOWED_IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".webp", ".bmp"}
+
+
+def _safe_image_path(raw_path: str) -> Path | None:
+    if not raw_path:
+        return None
+    try:
+        candidate = Path(raw_path)
+        resolved = candidate.resolve() if candidate.is_absolute() else (PROJECT_ROOT / candidate).resolve()
+    except Exception:
+        return None
+
+    if not resolved.exists() or not resolved.is_file():
+        return None
+    if resolved.suffix.lower() not in ALLOWED_IMAGE_EXTENSIONS:
+        return None
+
+    try:
+        resolved.relative_to(PROJECT_ROOT)
+        return resolved
+    except ValueError:
+        return None
+
+
+def _member_log_image_url(raw_path: str) -> str:
+    if not raw_path:
+        return ""
+    normalized = str(raw_path).strip().replace("\\", "/")
+    if not normalized:
+        return ""
+
+    if normalized.startswith(("http://", "https://")):
+        return normalized
+    if normalized.startswith("/static/"):
+        return normalized
+    if normalized.startswith("static/"):
+        return f"/{normalized}"
+
+    # If it's potentially just a filename, try to find it in standard folders
+    if "/" not in normalized and "\\" not in normalized:
+        folders = ["uploads/snapshots", "uploads/movement", "uploads/merged", "uploads"]
+        for folder in folders:
+            candidate = STATIC_ROOT / folder / normalized
+            if candidate.exists() and candidate.is_file():
+                return f"/static/{folder}/{normalized}"
+
+    safe_path = _safe_image_path(raw_path)
+    if safe_path is None:
+        return ""
+    try:
+        rel_static = safe_path.relative_to(STATIC_ROOT).as_posix()
+        return f"/static/{rel_static}"
+    except ValueError:
+        return f"/api/member-log-image?path={quote(str(safe_path))}"
+
+
+@attendance_bp.route('/member-log-image', methods=['GET'])
+@login_required
+def member_log_image():
+    image_path = _safe_image_path(request.args.get("path", ""))
+    if image_path is None:
+        return jsonify({"status": "error", "message": "Image not found"}), 404
+    return send_file(str(image_path))
 
 @attendance_bp.route('/attendance/today', methods=['GET'])
 def get_today_attendance():
@@ -53,8 +120,13 @@ def get_movement_logs():
             formatted_rows.append({
                 "id": r['id'],
                 "camera_id": r['camera_id'],
-                "image_path": r['image_path'],
-                "detected_at": r['detected_at'].strftime("%Y-%m-%d %H:%M:%S") if r.get('detected_at') else "-"
+                "camera_name": r.get('camera_name', r['camera_id']),
+                "entry_image": _member_log_image_url(r.get('entry_image') or r.get('image_path')),
+                "image_url": _member_log_image_url(r.get('entry_image') or r.get('image_path')),
+                "exit_image": _member_log_image_url(r.get('exit_image')),
+                "merged_image": _member_log_image_url(r.get('merged_image')),
+                "entry_time": r.get('entry_time', r.get('detected_at')).strftime("%Y-%m-%d %H:%M:%S") if r.get('entry_time') or r.get('detected_at') else "-",
+                "exit_time": r.get('exit_time').strftime("%Y-%m-%d %H:%M:%S") if r.get('exit_time') else "-"
             })
         return jsonify(formatted_rows)
     except Exception as e:
@@ -73,7 +145,7 @@ def get_person_logs():
             SELECT m.*, s.name as staff_name
             FROM member_timestamp m
             LEFT JOIN staff_profiles s ON m.staff_id = s.id
-            ORDER BY m.entry_time DESC
+            ORDER BY m.detected_at DESC
         """)
         rows = cur.fetchall()
         data = []
@@ -82,8 +154,11 @@ def get_person_logs():
                 "id": r['id'],
                 "person_type": r['person_type'],
                 "staff_name": r['staff_name'] or "Unknown",
-                "entry_time": r['entry_time'].strftime("%Y-%m-%d %H:%M:%S") if r.get('entry_time') else "-",
-                "entry_image": r['entry_image']
+                "entry_time": (r.get('entry_time') or r.get('detected_at')).strftime("%Y-%m-%d %H:%M:%S") if r.get('entry_time') or r.get('detected_at') else "-",
+                "exit_time": r.get('exit_time').strftime("%Y-%m-%d %H:%M:%S") if r.get('exit_time') else "-",
+                "entry_image": _member_log_image_url(r.get('entry_image') or r.get('image_path')),
+                "exit_image": _member_log_image_url(r.get('exit_image')),
+                "merged_image": _member_log_image_url(r.get('merged_image'))
             })
         return jsonify(data)
     except Exception as e:
@@ -98,16 +173,21 @@ def get_unknown_person_logs():
     conn = get_db_connection()
     try:
         cur = conn.cursor()
-        cur.execute("SELECT * FROM member_timestamp WHERE person_type = 'unknown' ORDER BY entry_time DESC")
+        cur.execute("SELECT * FROM member_timestamp WHERE person_type = 'unknown' ORDER BY detected_at DESC")
+        rows = cur.fetchall()
+        cur.execute("SELECT id, camera_id, image_path, detected_at FROM member_timestamp WHERE person_type = 'unknown' ORDER BY detected_at DESC")
         rows = cur.fetchall()
         # Ensure dates are JSON serializable
         formatted_rows = []
         for r in rows:
             formatted_rows.append({
                 "id": r['id'],
-                "camera_name": r['camera_name'],
-                "image_path": r['entry_image'],
-                "entry_time": r['entry_time'].strftime("%Y-%m-%d %H:%M:%S") if r.get('entry_time') else "-"
+                "camera_id": r['camera_id'],
+                "entry_image": _member_log_image_url(r.get('entry_image') or r.get('image_path')),
+                "exit_image": _member_log_image_url(r.get('exit_image')),
+                "merged_image": _member_log_image_url(r.get('merged_image')),
+                "entry_time": (r.get('entry_time') or r.get('detected_at')).strftime("%Y-%m-%d %H:%M:%S") if r.get('entry_time') or r.get('detected_at') else "-",
+                "exit_time": r.get('exit_time').strftime("%Y-%m-%d %H:%M:%S") if r.get('exit_time') else "-"
             })
         return jsonify(formatted_rows)
     except Exception as e:
@@ -126,7 +206,7 @@ def get_staff_count(date_str):
             SELECT staff_id, s.name, COUNT(*) as detections
             FROM member_timestamp m
             JOIN staff_profiles s ON m.staff_id = s.id
-            WHERE person_type = 'staff' AND DATE(entry_time) = %s
+            WHERE person_type = 'staff' AND DATE(detected_at) = %s
             GROUP BY staff_id, s.name
         """, (date_str,))
         rows = cur.fetchall()
@@ -172,14 +252,14 @@ def get_member_logs():
             params.append(person_type)
         
         if period == 'today':
-            where_clauses.append("m.entry_time::date = %s")
+            where_clauses.append("m.detected_at::date = %s")
             params.append(datetime.now().date())
         else:
             if date_from:
-                where_clauses.append("m.entry_time >= %s")
+                where_clauses.append("m.detected_at >= %s")
                 params.append(date_from)
             if date_to:
-                where_clauses.append("m.entry_time <= %s")
+                where_clauses.append("m.detected_at <= %s")
                 params.append(date_to)
                 
         if q:
@@ -200,17 +280,22 @@ def get_member_logs():
         cur.execute(f"""
             SELECT 
                 m.id, 
-                m.entry_image AS image_path, 
+                m.camera_id,
+                m.entry_image,
+                m.image_path, 
+                m.exit_image,
+                m.merged_image,
                 m.person_type, 
                 m.staff_id, 
                 s.name AS member_name, 
                 m.entry_time,
+                m.detected_at,
                 m.exit_time,
                 s.staff_id as display_id
             FROM member_timestamp m
             LEFT JOIN staff_profiles s ON m.staff_id = s.id
             {where_sql}
-            ORDER BY m.entry_time DESC
+            ORDER BY m.detected_at DESC
             LIMIT %s OFFSET %s
         """, tuple(params + [limit, offset]))
         
@@ -220,14 +305,19 @@ def get_member_logs():
         results = []
         for r in rows:
             p_type = r['person_type'] or "unknown"
+            image_path = r['image_path'] if r['image_path'] else ""
             results.append({
                 "id": r['id'],
                 "person_type": p_type.upper(),
                 "member_id": r['staff_id'],
                 "member_name": r['member_name'] or "-",
                 "display_id": r['display_id'] or "-",
-                "image_path": r['image_path'] if r['image_path'] else "",
-                "entry_time": r['entry_time'].strftime("%Y-%m-%d %H:%M:%S") if r['entry_time'] else "-",
+                "camera_id": r['camera_id'],
+                "entry_image": _member_log_image_url(r['entry_image'] or r['image_path']),
+                "image_url": _member_log_image_url(r['entry_image'] or r['image_path']),
+                "exit_image": _member_log_image_url(r['exit_image']),
+                "merged_image": _member_log_image_url(r['merged_image']),
+                "entry_time": (r['entry_time'] or r['detected_at']).strftime("%Y-%m-%d %H:%M:%S") if r['entry_time'] or r['detected_at'] else "-",
                 "exit_time": r['exit_time'].strftime("%Y-%m-%d %H:%M:%S") if r['exit_time'] else "-"
             })
             
@@ -268,10 +358,10 @@ def export_member_logs():
             where_clauses.append("m.person_type = %s")
             params.append(person_type)
         if date_from:
-            where_clauses.append("m.entry_time >= %s")
+            where_clauses.append("m.detected_at >= %s")
             params.append(date_from)
         if date_to:
-            where_clauses.append("m.entry_time <= %s")
+            where_clauses.append("m.detected_at <= %s")
             params.append(date_to)
             
         where_sql = ""
@@ -280,16 +370,16 @@ def export_member_logs():
             
         cur.execute(f"""
             SELECT 
-                m.entry_time AS detected_at,
+                m.detected_at,
                 m.person_type, 
                 s.staff_id as display_id,
                 s.name AS staff_name,
-                m.camera_name,
+                m.camera_id,
                 m.confidence_score
             FROM member_timestamp m
             LEFT JOIN staff_profiles s ON m.staff_id = s.id
             {where_sql}
-            ORDER BY m.entry_time DESC
+            ORDER BY m.detected_at DESC
         """, tuple(params))
         
         rows = cur.fetchall()
@@ -305,7 +395,7 @@ def export_member_logs():
                 r['person_type'].capitalize() if r['person_type'] else 'Unknown',
                 r['display_id'] or '',
                 r['staff_name'] or '',
-                r['camera_name'] or '',
+                r['camera_id'] or '',
                 f"{r['confidence_score']:.2f}" if r['confidence_score'] else '0.00'
             ])
             

@@ -41,7 +41,12 @@ import numpy as np
 from app.core import config as cfg
 from app.core.data_types import AIResult, TrackResult, scale_box
 from app.db.session import get_db_connection
-from app.services.attendance_service import log_movement, log_person, track_staff_attendance
+from app.services.attendance_service import (
+    log_movement,
+    log_person,
+    track_staff_attendance,
+    update_movement_classification,
+)
 from app.services.ai.action_detection import ActionDetector
 from app.services.ai.emotion_detection import EmotionDetector
 from app.services.ai.face_detection import FaceDetector
@@ -155,6 +160,11 @@ class AIPipeline(threading.Thread):
         self._db_sessions: dict[int, int] = {}
         self._entry_filenames: dict[int, str] = {}
         self._exit_filenames: dict[int, str] = {}
+        self._track_att_ids: dict[int, int] = {}
+        self._current_frame_motion_id = None
+        self._current_frame_motion_img = None
+        self._last_motion_img = None  # Keep last motion image for logging persons across frames
+        self._last_member_log_mono: dict[int, float] = {}
         self._last_face_reload = time.monotonic()
         os.makedirs(cfg.SNAPSHOT_DIR, exist_ok=True)
 
@@ -178,109 +188,6 @@ class AIPipeline(threading.Thread):
         except Exception:
             return 0.0
 
-    def _save_snapshot(self, frame, tid, mode="ENTRY"):
-        """Saves a forensic snapshot of a person entry or exit."""
-        if not cfg.ENABLE_SNAPSHOTS or frame is None:
-            return None, None
-        
-        try:
-            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            filename = f"{mode.lower()}_{self.camera_name.replace(' ', '_')}_ID{tid}_{timestamp}.jpg"
-            # Ensure upload folder exists for consistency with rest of app
-            static_uploads = "static/uploads/snapshots"
-            os.makedirs(static_uploads, exist_ok=True)
-            filepath = os.path.join(static_uploads, filename)
-            
-            snap_frame = frame.copy()
-            color = (0, 255, 0) if mode == "ENTRY" else (0, 0, 255)
-            text = f"{mode}: {self.camera_name} | ID: {tid} | {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
-            cv2.rectangle(snap_frame, (0, 0), (snap_frame.shape[1], 35), (0, 0, 0), -1)
-            cv2.putText(snap_frame, text, (10, 25), cv2.FONT_HERSHEY_SIMPLEX, 0.6, color, 2)
-            
-            cv2.imwrite(filepath, snap_frame)
-            log.info(f"📸 {mode} SNAPSHOT SAVED: {filepath} (ID: {tid})")
-            return snap_frame, filename
-        except Exception as e:
-            log.error(f"Failed to save {mode} snapshot: {e}")
-            return None, None
-
-    def _save_merged(self, entry_f, exit_f, tid):
-        """Creates a side-by-side Merged Forensic Masterpiece."""
-        if entry_f is None or exit_f is None: return None
-        try:
-            h = 480
-            w_e = int(entry_f.shape[1] * (h / entry_f.shape[0]))
-            w_x = int(exit_f.shape[1] * (h / exit_f.shape[0]))
-            merged = np.hstack((cv2.resize(entry_f, (w_e, h)), cv2.resize(exit_f, (w_x, h))))
-            
-            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            filename = f"merged_{self.camera_name.replace(' ', '_')}_ID{tid}_{timestamp}.jpg"
-            static_uploads = "static/uploads/snapshots"
-            os.makedirs(static_uploads, exist_ok=True)
-            cv2.imwrite(os.path.join(static_uploads, filename), merged)
-            log.info(f"🔗 MERGED LOG SAVED: {filename}")
-            return filename
-        except Exception as e:
-            log.error(f"Merge error: {e}")
-            return None
-
-    def _link_identity_to_snapshot(self, tid: int, identity: str) -> None:
-        """When face recognition fires, backfill staff_id/staff_name onto the
-        member_time_stamp row for this track session."""
-        if tid not in self._db_sessions:
-            return
-        session_id = self._db_sessions[tid]
-        try:
-            conn = get_db_connection()
-            cur = conn.cursor()
-            cur.execute(
-                "SELECT id FROM staff_profiles WHERE name = %s LIMIT 1",
-                (identity,),
-            )
-            row = cur.fetchone()
-            staff_id = row["id"] if row else None
-            cur.execute(
-                "UPDATE member_time_stamp SET staff_id = %s, staff_name = %s WHERE id = %s",
-                (staff_id, identity, session_id),
-            )
-            conn.commit()
-            conn.close()
-            log.info("Linked identity '%s' to member_time_stamp id=%d", identity, session_id)
-        except Exception as e:
-            log.error("_link_identity_to_snapshot error: %s", e)
-
-    def _db_log_entry(self, tid, filename, person_type="unknown", staff_id=None, confidence=0.0):
-        """Creates a forensic entry record in the database."""
-        try:
-            conn = get_db_connection()
-            cur = conn.cursor()
-            cur.execute("""
-                INSERT INTO member_timestamp (person_id, camera_name, entry_image, entry_time, person_type, staff_id, confidence_score)
-                VALUES (%s, %s, %s, %s, %s, %s, %s) RETURNING id
-            """, (tid, self.camera_name, filename, datetime.now(), person_type, staff_id, confidence))
-            row = cur.fetchone()
-            self._db_sessions[tid] = row['id']
-            self._entry_filenames[tid] = filename
-            conn.commit()
-            conn.close()
-        except Exception as e:
-            log.error(f"DB Entry log error: {e}")
-
-    def _db_log_exit(self, tid, exit_file, merged_file=None):
-        """Finalizes a forensic session in the database with exit and merged files."""
-        if tid not in self._db_sessions: return
-        try:
-            conn = get_db_connection()
-            cur = conn.cursor()
-            cur.execute("""
-                UPDATE member_timestamp 
-                SET exit_image = %s, merged_image = %s, exit_time = %s
-                WHERE id = %s
-            """, (exit_file, merged_file, datetime.now(), self._db_sessions[tid]))
-            conn.commit()
-            conn.close()
-        except Exception as e:
-            log.error(f"DB Exit log error: {e}")
 
     # ── Thread control ────────────────────────────────────────────────────────
 
@@ -370,21 +277,42 @@ class AIPipeline(threading.Thread):
             if self._frame_idx % 10 == 0:
                 log.info("AI: Processing frame #%d", self._frame_idx)
 
-            # 1. Motion gate
+            # 1) Movement stage: store manual motion snapshot if MOG2 triggers
             motion, mask = self.motion_det.detect(ai_frame)
             now = time.monotonic()
-            if motion:
-                if (now - self._last_motion_time) > cfg.MOTION_COOLDOWN_SEC:
-                    _total_motion_events += 1
-                    # Log movement
-                    log_movement(self.camera_name, "") # Image path can be added if captured
+            movement_id = None
+            movement_label = "unknown"
+            movement_conf = 0.0
+            force_person_scan = False
+            
+            # Cooldown logic for MOG2-based motion log entries
+            if motion and (now - self._last_motion_time) > 2.0:
+                primitive_log("MOG2 Motion triggered.")
+                motion_ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+                motion_filename = f"motion_{self.camera_name.replace(' ', '_')}_{motion_ts}.jpg"
+                motion_dir = os.path.join("static", "uploads", "movement")
+                os.makedirs(motion_dir, exist_ok=True)
+                motion_path = os.path.join(motion_dir, motion_filename)
+                
+                cv2.imwrite(motion_path, ai_frame)
+                primitive_log(f"Saved motion image: {motion_path}")
+                
+                self._current_frame_motion_img = f"static/uploads/movement/{motion_filename}"
+                self._last_motion_img = self._current_frame_motion_img
+                
+                movement_id = log_movement(self.camera_name, self._current_frame_motion_img)
+                movement_label, movement_conf = self.person_det.classify_motion(ai_frame)
+                force_person_scan = movement_label == "human"
+                if movement_id:
+                    update_movement_classification(movement_id, movement_label, movement_conf)
                 self._last_motion_time = now
 
-            # Always detect people if toggle is on (don't rely strictly on motion gate)
+            # 2) Human detection/tracking
             if AI_TOGGLES.get("person", True):
-                if self._frame_idx % max(1, cfg.YOLO_SKIP_FRAMES) == 0:
+                if force_person_scan or self._frame_idx % max(1, cfg.YOLO_SKIP_FRAMES) == 0:
                     self._last_detections = self.person_det.detect(ai_frame)
-                    log.info("AI: YOLO found %d persons", len(self._last_detections))
+                    if len(self._last_detections) > 0:
+                        log.info("AI: YOLO found %d persons", len(self._last_detections))
             else:
                 self._last_detections = []
 
@@ -393,7 +321,7 @@ class AIPipeline(threading.Thread):
             elif not AI_TOGGLES.get("action", True):
                 self._last_objects = {"food": [], "phone": []}
 
-            # 3. Tracker
+            # 3) Tracker
             raw_tracks = self.tracker.update(self._last_detections, ai_frame)
             active_ids = {t.track_id for t in raw_tracks}
             if len(active_ids) > 0 or len(self._last_detections) > 0:
@@ -413,82 +341,100 @@ class AIPipeline(threading.Thread):
                     self.exits += 1
                     log.info(f"COUNT: Person left (ID: {tid}). Total Exits: {self.exits}")
                     
-                    entry_f = self._entry_best_frames.get(tid)
-                    exit_f  = self._exit_best_frames.get(tid)
-                    
-                    exit_file = self._exit_filenames.get(tid)
-                    if tid not in self._exit_taken:
-                        exit_f_processed, exit_file = self._save_snapshot(exit_f, tid, mode="EXIT")
-                    else:
-                        exit_f_processed = exit_f
-                    
-                    merged_file = None
-                    if entry_f is not None and exit_f_processed is not None:
-                        merged_file = self._save_merged(entry_f, exit_f_processed, tid)
-                    
-                    self._db_log_exit(tid, exit_file, merged_file)
-                    
-                    # Automated OUT Attendance
-                    staff_res = self.face_rec._cache.get(tid, {"name": "Unknown"})
-                    staff_name = staff_res.get("name", "Unknown")
-                    
-                    try:
-                        # Mark OUT even for Unknown persons
-                        mark_attendance_name = staff_name if staff_name != "Unknown" else "Unknown Person"
-                        img_url = f"static/uploads/snapshots/{exit_file}" if exit_file else None
-                        mark_attendance(employee_name=mark_attendance_name, phone_number="", status="OUT", image_path=img_url)
-                        log.info(f"Attendance: Marked OUT for {mark_attendance_name} (ID: {tid})")
-                    except Exception as e:
-                        log.error(f"Failed to mark dynamic OUT attendance: {e}")
-
-                    # Cleanup
                     for d in [self._entry_best_frames, self._exit_best_frames, self._best_entry_scores, 
                               self._best_exit_scores, self._track_start_time, self._db_sessions, 
                               self._entry_filenames, self._exit_filenames, self._track_att_ids]:
                         if tid in d: del d[tid]
                     if tid in self._exit_taken: self._exit_taken.remove(tid)
 
-            # 3. Best-Shot Monitoring (During Active Stay)
-            for track in raw_tracks:
-                tid = track.track_id
-                score = self._calculate_clarity(ai_frame, track.bbox)
-                
-                # --- Entry Shot ---
-                if tid not in self._best_entry_scores:
-                    if score > 45 or self._frame_idx % 12 == 0:
-                        self._best_entry_scores[tid] = score
-                        snap, filename = self._save_snapshot(ai_frame, tid, mode="ENTRY")
-                        if snap is not None: 
-                            self._entry_best_frames[tid] = snap
-                            
-                            # Initial entry log - might be unknown at first
-                            cached_res = self.face_rec._cache.get(tid, {"name": "Unknown", "id": None})
-                            p_type = "staff" if cached_res["name"] != "Unknown" else "unknown"
-                            s_id = cached_res.get("id")
-                            self._db_log_entry(tid, filename, person_type=p_type, staff_id=s_id)
+            # 4) Promotion stage: movement_log -> member_timestamp
+            # FALLBACK: If we have persons but no motion image yet, capture one NOW.
+            if not self._last_motion_img and raw_tracks:
+                log.info("DEBUG: Detections present but no motion image. Capturing fallback snapshot...")
+                motion_ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+                motion_filename = f"det_fallback_{self.camera_name.replace(' ', '_')}_{motion_ts}.jpg"
+                motion_dir = os.path.join("static", "uploads", "movement")
+                os.makedirs(motion_dir, exist_ok=True)
+                motion_path = os.path.join(motion_dir, motion_filename)
+                cv2.imwrite(motion_path, ai_frame)
+                self._last_motion_img = f"static/uploads/movement/{motion_filename}"
+                log.info(f"DEBUG: Fallback snapshot saved: {self._last_motion_img}")
 
-                stay_duration = now - self._track_start_time.get(tid, now)
-                bx1, by1, bx2, by2 = track.bbox
-                is_leaving = (bx1 < 15 or by1 < 15 or bx2 > (ai_w - 15) or by2 > (ai_h - 15))
-                
-                if is_leaving and stay_duration > 3.0 and tid not in self._exit_taken and self._frame_idx % 3 == 0:
-                    snap, exit_file = self._save_snapshot(ai_frame, tid, mode="EXIT")
-                    if snap is not None:
-                        self._exit_best_frames[tid] = snap
-                        self._exit_filenames[tid] = exit_file
-                        self._exit_taken.add(tid)
-                        entry_f = self._entry_best_frames.get(tid)
-                        merged_file = self._save_merged(entry_f, snap, tid) if entry_f is not None else None
-                        self._db_log_exit(tid, exit_file, merged_file)
+            if self._last_motion_img and raw_tracks:
+                for track in raw_tracks:
+                    tid = track.track_id
+                    if (now - self._last_member_log_mono.get(tid, 0.0)) < 1.5:
+                        continue
 
-                if tid not in self._exit_taken:
-                    if tid not in self._best_exit_scores or score >= (self._best_exit_scores[tid] * 0.40):
-                        self._best_exit_scores[tid] = max(score, self._best_exit_scores.get(tid, 0))
-                        self._exit_best_frames[tid] = ai_frame.copy()
+                    bbox = track.bbox
+                    bx1, by1, bx2, by2 = (max(0, int(v)) for v in bbox)
+                    bx2 = min(ai_w, bx2)
+                    by2 = min(ai_h, by2)
+                    person_crop = ai_frame[by1:by2, bx1:bx2]
+                    if person_crop.size == 0:
+                        continue
+
+                    rec = self.face_rec._cache.get(tid, {"id": None, "name": "Unknown", "display_id": ""})
+                    if rec.get("name", "Unknown") == "Unknown":
+                        try:
+                            rec = self.face_rec.recognize(person_crop, tid)
+                        except Exception as e:
+                            log.debug("Direct recognition failed for tid=%s: %s", tid, e)
+
+                    identity = rec.get("name", "Unknown")
+                    staff_id = rec.get("id")
+                    
+                    # FINAL HUMAN VERIFICATION
+                    # If staff, it's definitely a human. If not staff, we MUST verify it's a "human" and not a false positive (shadow/light).
+                    if staff_id and identity != "Unknown":
+                        person_type = "staff"
+                    else:
+                        # Double-check classification for unknown detections
+                        v_label, v_conf = self.person_det.classify_motion(person_crop)
+                        if v_label != "human":
+                            log.debug(f"DEBUG: Skipping promotion for TID {tid} - classify result: {v_label} ({v_conf:.2f})")
+                            continue
+                        person_type = "unknown"
+
+                    confidence = self._calculate_clarity(ai_frame, bbox)
+                    
+                    if (now - self._track_start_time.get(tid, now)) < 0.5:
+                        continue
+
+                    log.info(f"DEBUG: Promoting track {tid} ({person_type}) to member_timestamp")
+                    member_id = log_person(
+                        self.camera_name,
+                        person_type,
+                        staff_id,
+                        self._last_motion_img,
+                        confidence,
+                        staff_name=identity if person_type == "staff" else None,
+                    )
+                    if member_id:
+                        self._last_member_log_mono[tid] = now
+
+                    if person_type == "staff" and staff_id:
+                        log.info(f"DEBUG: STAFF FOUND! Calling track_staff_attendance for {identity} (ID:{staff_id})")
+                        attendance = track_staff_attendance(
+                            staff_id=staff_id,
+                            staff_name=identity,
+                            entry_image=self._last_motion_img,
+                        )
+                        log.info(f"DEBUG: track_staff_attendance result: {attendance}")
+                        if attendance.get("is_first_entry"):
+                            self.notifier.send_message(
+                                f"✅ *ATTENDANCE*: {identity} first detected today on {self.camera_name}."
+                            )
+                    else:
+                        log.info(f"DEBUG: Person type is {person_type}, staff_id is {staff_id} - NOT calling attendance")
+                    
+                    log.info(
+                        "Flow: snapshot=%s -> member_timestamp person_type=%s tid=%s",
+                        self._last_motion_img, person_type, tid,
+                    )
 
             self._active_ids = active_ids
-            if active_ids:
-                self._last_motion_time = now
+            # MOVED: self._last_motion_time = now  <-- This was blocking the motion block if someone was in frame!
 
             # 4. Per-track processing for UI
             track_results: list[TrackResult] = []
@@ -539,55 +485,6 @@ class AIPipeline(threading.Thread):
                     
                     try:
                         is_unknown = (identity == "" or identity == "Unknown")
-                        
-                        # Automated Attendance (for BOTH Staff and Unknown)
-                        if tid not in self._notified_identities:
-                            try:
-                                person_type = "staff" if not is_unknown else "unknown"
-                                staff_db_id = cached_res.get("id")
-                                
-                                # Update existing session if it was previously logged as unknown
-                                if tid in self._db_sessions:
-                                    try:
-                                        conn = get_db_connection()
-                                        cur = conn.cursor()
-                                        cur.execute("""
-                                            UPDATE member_timestamp 
-                                            SET person_type = %s, staff_id = %s
-                                            WHERE id = %s
-                                        """, (person_type, staff_db_id, self._db_sessions[tid]))
-                                        conn.commit()
-                                        conn.close()
-                                    except Exception as e:
-                                        log.error(f"Failed to update session identity: {e}")
-                                else:
-                                    # Fallback: if no session exists yet, log it
-                                    log_person(self.camera_name, person_type, staff_db_id, "", 0.0)
-                                
-                                if not is_unknown and staff_db_id:
-                                    # If staff, track attendance
-                                    track_staff_attendance(staff_db_id)
-                                    # Send notification for staff match
-                                    self.notifier.send_message(f"✅ *MATCH DETECTED*: Member **{identity}** recognized on {self.camera_name}.")
-                                
-                                self._notified_identities.add(tid)
-                                log.info(f"Attendance/Logging: Processed {identity} (ID: {tid})")
-                            except Exception as e:
-                                log.error(f"Failed to mark dynamic IN attendance: {e}")
-                        
-                        # Handle Delayed Identity Discovery
-                        elif not is_unknown and tid in self._track_att_ids:
-                             # We previously marked as Unknown, but now we have a name!
-                             att_id = self._track_att_ids[tid]
-                             # We'll check if we actually need to update (simple check: if name was "Unknown")
-                             # To keep it simple, we just try to update. update_attendance_name is safe.
-                             if update_attendance_name(att_id, identity):
-                                 log.info(f"Attendance: Updated record {att_id} with discovered name: {identity}")
-                                 # Send notification now that we know who they are
-                                 self.notifier.send_message(f"✅ *MATCH DISCOVERED*: Member **{identity}** matched for active session on {self.camera_name}.")
-                                 # Remove from track_att_ids so we don't spam updates
-                                 del self._track_att_ids[tid]
-                        
                         active_rec_tasks = sum(1 for f in self._rec_futures.values() if not f.done())
                         if (is_unknown or (self._frame_idx % 300 == 0)) and active_rec_tasks < 2:
                             self._submit_rec(ai_frame, bbox, tid)
@@ -615,6 +512,9 @@ class AIPipeline(threading.Thread):
                 for tid in list(self._notified_identities):
                     if tid not in active_ids:
                         self._notified_identities.discard(tid)
+                for tid in list(self._last_member_log_mono):
+                    if tid not in active_ids:
+                        self._last_member_log_mono.pop(tid, None)
                 if len(self._seen_ids) > 1000:
                     self._seen_ids = self._seen_ids.intersection(active_ids)
 

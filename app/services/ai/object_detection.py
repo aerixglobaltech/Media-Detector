@@ -10,7 +10,15 @@ exceeds `conf_threshold` are returned.
 from __future__ import annotations
 
 import numpy as np
-from ultralytics import YOLO
+try:
+    from ultralytics import YOLO
+    HAS_YOLO = True
+except ImportError:
+    log.warning("ultralytics module not found. AI detection will be disabled.")
+    HAS_YOLO = False
+    class YOLO:
+        def __init__(self, *args, **kwargs): pass
+        def __call__(self, *args, **kwargs): return []
 
 
 # COCO class IDs for food / eating-related objects
@@ -51,6 +59,7 @@ class PersonDetector:
     """Thin wrapper around an Ultralytics YOLOv8 model."""
 
     PERSON_CLASS_ID = 0  # COCO class index for 'person'
+    ANIMAL_CLASS_IDS = {14, 15, 16, 17, 18, 19, 20, 21, 22, 23}
 
     def __init__(
         self,
@@ -142,3 +151,33 @@ class PersonDetector:
                     phone_boxes.append(bbox)
 
         return {"food": food_boxes, "phone": phone_boxes}
+
+    def classify_motion(self, frame: np.ndarray) -> tuple[str, float]:
+        """
+        Classify a movement frame as human / animal / unknown.
+        Returns: (label, confidence)
+        """
+        try:
+            results = self.model(
+                frame,
+                conf=0.50,
+                classes=[self.PERSON_CLASS_ID, *sorted(self.ANIMAL_CLASS_IDS)],
+                device=self.device,
+                verbose=False,
+            )
+            best_label = "unknown"
+            best_conf = 0.0
+            for result in results:
+                for box in result.boxes:
+                    conf = float(box.conf[0])
+                    cls_id = int(box.cls[0])
+                    if cls_id == self.PERSON_CLASS_ID and conf >= best_conf:
+                        best_label = "human"
+                        best_conf = conf
+                    elif cls_id in self.ANIMAL_CLASS_IDS and conf >= best_conf and best_label != "human":
+                        best_label = "animal"
+                        best_conf = conf
+            return best_label, best_conf
+        except Exception as exc:
+            log.warning("YOLO classify_motion failed: %s", exc)
+            return "unknown", 0.0

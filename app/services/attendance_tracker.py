@@ -236,13 +236,8 @@ class AttendanceTracker:
             today = wall_time.date()
 
             # 1. Insert movement_log
-            cur.execute(
-                """
-                INSERT INTO movement_log (staff_id, event_type, timestamp, camera_name, session_date)
-                VALUES (%s, %s, %s, %s, %s)
-                """,
-                (staff_id, event_type, wall_time, camera_name, today),
-            )
+            from app.services.attendance_service import log_movement
+            log_movement(camera_name, "") # Legacy tracker events don't have images here
 
             # 2. Upsert attendance daily summary
             if event_type == "IN":
