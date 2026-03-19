@@ -337,6 +337,7 @@ def init_db() -> None:
                 entry_image TEXT,
                 in_image TEXT,
                 out_image TEXT,
+                camera_name VARCHAR(100),
                 movement_count INTEGER DEFAULT 0,
                 total_duration_minutes INTEGER DEFAULT 0,
                 day_status VARCHAR(20) DEFAULT 'open',
@@ -357,6 +358,7 @@ def init_db() -> None:
             cur.execute("ALTER TABLE attendance ADD COLUMN IF NOT EXISTS movement_count INTEGER DEFAULT 0")
             cur.execute("ALTER TABLE attendance ADD COLUMN IF NOT EXISTS total_duration_minutes INTEGER DEFAULT 0")
             cur.execute("ALTER TABLE attendance ADD COLUMN IF NOT EXISTS timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP")
+            cur.execute("ALTER TABLE attendance ADD COLUMN IF NOT EXISTS camera_name VARCHAR(100)")
         except Exception:
             conn.rollback()
             cur = conn.cursor()

@@ -18,6 +18,7 @@
           <button id="period-all" class="toggle-btn active" onclick="setPeriod('all')">All</button>
           <button id="period-today" class="toggle-btn" onclick="setPeriod('today')">Today</button>
         </div>
+        <button class="secondary-btn" onclick="exportLogs()"><span>📥</span> Export Logs</button>
         <button id="toggle-logs-summary-btn" class="secondary-btn" onclick="toggleLogsSummary()"><span>⌃</span> Hide Summary</button>
       </div>
     </div>
@@ -47,10 +48,6 @@
           <span style="font-size:15px;">📅</span>
           <input id="log-date-range" type="text" class="log-input" readonly placeholder="Pick a date range" />
         </div>
-      </div>
-      <div style="flex-grow:1;"></div>
-      <div style="display:flex; align-items:flex-end;">
-        <button class="secondary-btn" onclick="exportLogs()" style="height:38px;"><span>📥</span> Export Logs</button>
       </div>
     </div>
 
@@ -182,6 +179,9 @@
     } else {
       rangeCont.style.opacity = '1';
       rangeCont.style.pointerEvents = 'auto';
+      // Clear the date picker when switching to 'All' to avoid being stuck on 'Today'
+      if (rangeInput) rangeInput.value = '';
+      if (rangeInput?._flatpickr) rangeInput._flatpickr.clear();
     }
     
     resetAndLoadLogs();
@@ -410,6 +410,8 @@
       }
 
       document.getElementById('count-total').textContent = pagination.total;
+      document.getElementById('count-staff').textContent = pagination.staff_count || 0;
+      document.getElementById('count-unknown').textContent = pagination.unknown_count || 0;
       renderPagination(pagination);
 
     } catch (e) {

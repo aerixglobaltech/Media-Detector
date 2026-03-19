@@ -21,14 +21,18 @@
         </div>
         <button id="toggle-att-summary-btn" class="secondary-btn" onclick="toggleAttendanceSummary()"><span>⌃</span>
           Hide Summary</button>
+        <!-- 
         <div class="att-view-tabs">
           <button class="att-view-tab active" id="tab-events" onclick="switchView('events')">Events</button>
           <button class="att-view-tab" id="tab-forensics" onclick="switchView('forensics')">📸 Forensic Images</button>
         </div>
+        -->
         <button class="att-btn att-btn-secondary" onclick="exportAttendance()">📥 Export</button>
-      <button id="instant-mark-btn" class="att-btn" style="background: var(--accent2); color: white;" onclick="instantMarkAttendance()">
-        📸 Instant Mark
-      </button>
+        <!--
+        <button id="instant-mark-btn" class="att-btn" style="background: var(--accent2); color: white;" onclick="instantMarkAttendance()">
+          📸 Instant Mark
+        </button>
+        -->
       <div id="instant-mark-loading" class="att-spinner" style="display: none; width: 20px; height: 20px; margin-left: 8px;"></div>
       </div>
     </div>
@@ -71,7 +75,9 @@
               <th class="log-th">Member ID</th>
               <th class="att-th">Member</th>
               <th class="att-th">First Entry</th>
+              <th class="att-th">In</th>
               <th class="att-th">Last Exit</th>
+              <th class="att-th">Out</th>
               <th class="att-th">Status</th>
               <th class="att-th">Time</th>
               <th class="att-th">Camera</th>
@@ -661,6 +667,9 @@
     } else {
       rangeWrap.style.opacity = '1';
       rangeWrap.style.pointerEvents = 'auto';
+      // Clear the date picker when switching to 'All' to avoid being stuck on 'Today'
+      if (rangeInput) rangeInput.value = '';
+      if (rangeInput?._flatpickr) rangeInput._flatpickr.clear();
     }
     attCurrentPage = 1;
     loadAttendance();
@@ -875,7 +884,13 @@
         <td class="att-td"><span style="font-family:monospace; font-weight:600; color:var(--accent);">${r.display_id || '-'}</span></td>
         <td class="att-td"><strong>${r.name || '-'}</strong><div style="font-size:11px; color:var(--muted);">${r.email || ''}</div></td>
         <td class="att-td">${fmtDateTime(r.in_time)}</td>
+        <td class="att-td">
+          ${r.in_image ? `<img src="/${r.in_image}" style="height:32px; width:45px; object-fit:cover; border-radius:4px; border:1px solid var(--border);" onerror="this.style.display='none'">` : '-'}
+        </td>
         <td class="att-td">${fmtDateTime(r.out_time)}</td>
+        <td class="att-td">
+          ${r.out_image ? `<img src="/${r.out_image}" style="height:32px; width:45px; object-fit:cover; border-radius:4px; border:1px solid var(--border);" onerror="this.style.display='none'">` : '-'}
+        </td>
         <td class="att-td"><span class="badge-status ${statusClass}">${statusText}</span></td>
         <td class="att-td" style="white-space:nowrap;">${r.timestamp || '-'}</td>
         <td class="att-td">${r.camera_name || '—'}</td>
@@ -923,8 +938,8 @@
     currentView = view;
     document.getElementById('view-events').style.display    = view === 'events'    ? 'block' : 'none';
     document.getElementById('view-forensics').style.display = view === 'forensics' ? 'block' : 'none';
-    document.getElementById('tab-events').classList.toggle('active',    view === 'events');
-    document.getElementById('tab-forensics').classList.toggle('active', view === 'forensics');
+    if (document.getElementById('tab-events')) document.getElementById('tab-events').classList.toggle('active',    view === 'events');
+    if (document.getElementById('tab-forensics')) document.getElementById('tab-forensics').classList.toggle('active', view === 'forensics');
     if (view === 'forensics') {
       // Default to today
       const d = document.getElementById('forensics-date');
@@ -1001,6 +1016,7 @@
   async function instantMarkAttendance() {
     const btn = document.getElementById('instant-mark-btn');
     const loading = document.getElementById('instant-mark-loading');
+    if (!btn) return;
     
     btn.disabled = true;
     const oldText = btn.innerText;

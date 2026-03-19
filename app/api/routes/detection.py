@@ -136,6 +136,106 @@ def api_dashboard_info():
     })
 
 
+@api_bp.route("/api/dashboard_v3")
+def api_dashboard_v3():
+    """Version 3 of Dashboard API: includes trend and presence."""
+    staff_count = 0
+    user_count = 0
+    db_status = "error"
+    online_count = 0
+    total_cameras = 0
+    attendance_trend = []
+    daily_presence = []
+    
+    try:
+        conn = get_db_connection()
+        cur = conn.cursor()
+        
+        # 1. Staff count
+        cur.execute("SELECT COUNT(*)::int as count FROM staff_profiles")
+        row = cur.fetchone()
+        if row: staff_count = int(row['count'] or 0)
+        
+        # 2. User count
+        cur.execute("SELECT COUNT(*)::int as count FROM users")
+        row = cur.fetchone()
+        if row: user_count = int(row['count'] or 0)
+        
+        # 3. Attendance Trend (Last 7 days)
+        # Using attendance table for daily unique entries/exits
+        cur.execute("""
+            SELECT 
+                attendance_date as day,
+                COUNT(first_entry_time)::int as check_in,
+                COUNT(last_exit_time)::int as check_out
+            FROM attendance
+            WHERE attendance_date >= CURRENT_DATE - INTERVAL '7 days'
+            GROUP BY attendance_date
+            ORDER BY attendance_date ASC
+        """)
+        rows = cur.fetchall()
+        for r in rows:
+            attendance_trend.append({
+                "day": r['day'].strftime("%m/%d") if hasattr(r['day'], 'strftime') else str(r['day']),
+                "check_in": int(r['check_in'] or 0),
+                "check_out": int(r['check_out'] or 0)
+            })
+            
+        # 4. Daily Presence (Today)
+        cur.execute("""
+            SELECT s.name, a.status, a.last_exit_time as last_seen
+            FROM attendance a
+            JOIN staff_profiles s ON a.staff_id = s.id
+            WHERE a.attendance_date = CURRENT_DATE
+            ORDER BY a.last_exit_time DESC
+        """)
+        rows = cur.fetchall()
+        for r in rows:
+            daily_presence.append({
+                "name": r['name'],
+                "status": r['status'] or 'IN',
+                "last_seen": r['last_seen'].isoformat() if hasattr(r['last_seen'], 'isoformat') else str(r['last_seen'])
+            })
+            
+        cur.close()
+        conn.close()
+        db_status = "connected"
+    except Exception as e:
+        log.error("DASHBOARD_V3 ERROR: %s", e)
+        db_status = f"error: {str(e)}"
+
+    # 5. Camera counts
+    user_email = session.get("user")
+    cams = get_all_cameras(user_email=user_email)
+    for c in cams:
+        st = c.get("status", "").lower()
+        if "online" in st or "🟢" in st:
+            online_count += 1
+    total_cameras = len(cams)
+
+    # 6. AI & Media status
+    ai_status = "error"
+    if cam_mgr and hasattr(cam_mgr, "_pipeline") and cam_mgr._pipeline:
+        if hasattr(cam_mgr._pipeline, "is_alive") and cam_mgr._pipeline.is_alive():
+            ai_status = "running"
+        else:
+            ai_status = "idle"
+    media_status = "active" if total_cameras > 0 else "idle"
+
+    return jsonify({
+        "dashboard_v": "3.0",
+        "cam_online": online_count,
+        "cam_total": total_cameras,
+        "staff_total": staff_count,
+        "user_total": user_count,
+        "db_status": db_status,
+        "ai_status": ai_status,
+        "media_status": media_status,
+        "attendance_trend": attendance_trend,
+        "daily_presence": daily_presence
+    })
+
+
 # ─── Telegram Notifications ───────────────────────────────────────────────────
 
 @api_bp.route("/api/notify_manual", methods=["POST"])
@@ -934,6 +1034,9 @@ def api_attendance_records():
                 a.status,
                 a.first_entry_time     AS in_time,
                 a.last_exit_time       AS out_time,
+                a.camera_name,
+                a.in_image,
+                a.out_image,
                 a.timestamp
             FROM attendance a
             LEFT JOIN staff_profiles s ON s.id = a.staff_id
@@ -972,6 +1075,9 @@ def api_attendance_records():
                 "status": r["status"],
                 "in_time": r["in_time"].strftime("%Y-%m-%d %H:%M:%S") if r["in_time"] else "-",
                 "out_time": r["out_time"].strftime("%Y-%m-%d %H:%M:%S") if r["out_time"] else "-",
+                "camera_name": r.get("camera_name", "-"),
+                "in_image": r.get("in_image"),
+                "out_image": r.get("out_image"),
                 "timestamp": r["timestamp"].strftime("%Y-%m-%d") if hasattr(r["timestamp"], "strftime") else str(r["timestamp"])
             })
 
@@ -1055,7 +1161,7 @@ def api_attendance_instant_mark():
         log_person(camera_name, "staff", staff_id, img_url, 1.0, staff_name=name)
 
         # 8. Flow Step 3: Mark official Attendance
-        track_staff_attendance(staff_id, staff_name=name, entry_image=img_url)
+        track_staff_attendance(staff_id, staff_name=name, entry_image=img_url, camera_name=camera_name)
 
         log.info("MANUAL ATTENDANCE CHAIN COMPLETE: %s", name)
         
@@ -1190,7 +1296,8 @@ def api_attendance_export():
                 COALESCE(s.phone, '')  AS phone,
                 a.status,
                 a.first_entry_time     AS in_time,
-                a.last_exit_time       AS out_time
+                a.last_exit_time       AS out_time,
+                a.camera_name
             FROM attendance a
             LEFT JOIN staff_profiles s ON s.id = a.staff_id
             {where_sql}
@@ -1209,7 +1316,7 @@ def api_attendance_export():
 
             output = io.StringIO()
             writer = csv.writer(output)
-            writer.writerow(["Date", "Staff ID", "Member Name", "Email", "Phone", "Status", "First Entry", "Last Exit"])
+            writer.writerow(["Date", "Staff ID", "Member Name", "Email", "Phone", "Status", "Camera", "First Entry", "Last Exit"])
             for r in rows:
                 writer.writerow([
                     r["attendance_date"], 
@@ -1218,6 +1325,7 @@ def api_attendance_export():
                     r["email"], 
                     r["phone"], 
                     r["status"], 
+                    r["camera_name"],
                     r["in_time"].strftime("%H:%M:%S") if r["in_time"] else "-", 
                     r["out_time"].strftime("%H:%M:%S") if r["out_time"] else "-"
                 ])
@@ -1233,7 +1341,7 @@ def api_attendance_export():
 
         df = pd.DataFrame(rows)
         if not df.empty:
-            df.columns = ["Date", "Staff ID", "Name", "Email", "Phone", "Status", "First Entry", "Last Exit"]
+            df.columns = ["Date", "Staff ID", "Name", "Email", "Phone", "Status", "First Entry", "Last Exit", "Camera"]
         output = io.BytesIO()
         with pd.ExcelWriter(output, engine="openpyxl") as writer:
             df.to_excel(writer, index=False, sheet_name="Attendance")
