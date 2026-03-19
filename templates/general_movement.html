@@ -1,0 +1,443 @@
+{% extends "base.html" %}
+{% set active_page = 'general_movement' %}
+
+{% block content %}
+<div style="height: calc(100vh - 53px); overflow-y: auto; background: var(--bg); padding: 28px;">
+  <div style="background: var(--surface); border-radius: 14px; border: 1px solid var(--border); box-shadow: var(--shadow-sm); padding: 32px 40px; min-height: calc(100vh - 53px - 56px);">
+    <div style="margin-bottom: 24px; display:flex; justify-content:space-between; align-items:flex-end; gap:16px; flex-wrap:wrap;">
+      <div>
+        <div style="display:flex; align-items:center; gap:12px; margin-bottom:6px;">
+          <span style="font-size:26px;">🚶</span>
+          <h1 style="font-size:24px; font-weight:800; color: var(--text); margin:0;">General Movement</h1>
+        </div>
+        <p style="font-size:14px; color: var(--muted); margin:0;">Real-time human movement logs</p>
+      </div>
+      <div style="display:flex; align-items:center; gap:12px;">
+        <!-- All / Today Segmented Control -->
+        <div class="period-toggle">
+          <button id="period-all" class="toggle-btn active" onclick="setPeriod('all')">All</button>
+          <button id="period-today" class="toggle-btn" onclick="setPeriod('today')">Today</button>
+        </div>
+        <button id="toggle-logs-summary-btn" class="secondary-btn" onclick="toggleLogsSummary()"><span>⌃</span> Hide Summary</button>
+      </div>
+    </div>
+
+    <!-- Summary Cards -->
+    <div id="logs-summary" style="display:grid; grid-template-columns:repeat(3,minmax(200px,1fr)); gap:16px; margin-bottom:24px;">
+      <div class="log-card"><div class="log-label">Total Detections</div><div class="log-value" id="count-total">0</div></div>
+      <div class="log-card"><div class="log-label">Members Recognized</div><div class="log-value" id="count-staff">0</div></div>
+      <div class="log-card"><div class="log-label">Unknown Persons</div><div class="log-value" id="count-unknown">0</div></div>
+    </div>
+
+    <!-- Filters -->
+    <div class="log-filter-row">
+      <div class="log-search-wrap" style="position:relative; min-width:0; flex:1; max-width:400px;">
+        <span style="position:absolute; left:12px; top:50%; transform:translateY(-50%); font-size:14px; color: var(--muted);">🔍</span>
+        <input id="log-search" type="text" class="log-input" placeholder="Search by name or ID..." style="padding-left:36px;" oninput="debouncedLoadLogs()" />
+      </div>
+      <div class="log-filter-group">
+        <select id="log-type-filter" class="log-input" onchange="resetAndLoadLogs()" style="width:140px;">
+          <option value="">All Persons</option>
+          <option value="staff">Staff Only</option>
+          <option value="unknown">Unknown Only</option>
+        </select>
+      </div>
+      <div class="log-filter-group" id="date-range-container" style="min-width:240px;">
+        <div class="log-range-wrap">
+          <span style="font-size:15px;">📅</span>
+          <input id="log-date-range" type="text" class="log-input" readonly placeholder="Pick a date range" />
+        </div>
+      </div>
+      <div style="flex-grow:1;"></div>
+      <div style="display:flex; align-items:flex-end;">
+        <button class="secondary-btn" onclick="exportLogs()" style="height:38px;"><span>📥</span> Export Logs</button>
+      </div>
+    </div>
+
+    <!-- Logs Table -->
+    <div style="border:1px solid var(--border); border-radius:12px; overflow:hidden; background: var(--surface);">
+      <table style="width:100%; border-collapse:collapse;">
+        <thead style="background: var(--surface2);">
+          <tr>
+            <th class="log-th" style="width:60px;">Image</th>
+            <th class="log-th">Member ID</th>
+            <th class="log-th">Member Name</th>
+            <th class="log-th">Member Type</th>
+            <th class="log-th">Entry Time</th>
+            <th class="log-th">Exit Time</th>
+            <th class="log-th" style="width:60px; text-align:center;">Actions</th>
+          </tr>
+        </thead>
+        <tbody id="logs-table-body">
+          <tr><td colspan="7" class="log-empty">Initializing logs...</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- Pagination -->
+    <div id="logs-pagination" style="margin-top:16px; padding:12px 14px; background: var(--surface); border:1px solid var(--border); border-radius:12px; display:flex; justify-content:space-between; align-items:center; font-size:13px; color: var(--muted);">
+    </div>
+  </div>
+</div>
+
+<!-- Details Modal -->
+<div id="details-modal" class="modal-overlay" onclick="closeDetailsModal()">
+  <div class="modal-content-details" onclick="event.stopPropagation()">
+    <div style="display:flex; justify-content:space-between; align-items:center; padding:20px; border-bottom:1px solid var(--border);">
+      <h2 style="margin:0; font-size:18px;">Detection Details</h2>
+      <button class="close-btn" onclick="closeDetailsModal()">✕</button>
+    </div>
+    <div id="details-content" style="padding:24px;">
+      <!-- Content injected by JS -->
+    </div>
+  </div>
+</div>
+
+<!-- Image Overlay Modal -->
+<div id="image-modal" class="modal-overlay" onclick="closeImageModal()">
+  <div class="modal-content-img" onclick="event.stopPropagation()">
+    <button class="close-overlay" onclick="closeImageModal()">✕</button>
+    <img id="overlay-img" src="" alt="Full Detections">
+    <div id="overlay-details" style="padding:15px; background:var(--surface); border-top:1px solid var(--border); font-size:14px; text-align:center;"></div>
+  </div>
+</div>
+
+<style>
+  .log-card { background: var(--surface2); border: 1px solid var(--border); border-radius: 12px; padding: 16px 18px; }
+  .log-label { font-size: 12px; color: var(--muted); margin-bottom: 8px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; }
+  .log-value { font-size: 24px; color: var(--text); font-weight: 800; line-height: 1; }
+  .log-input { width: 100%; padding: 9px 12px; border: 1px solid var(--border); border-radius: 8px; background: var(--bg); color: var(--text); font-size: 13px; outline: none; transition: border-color 0.2s; }
+  .log-input:focus { border-color: var(--accent); }
+  .log-filter-row { display:flex; gap:10px; align-items:center; margin-bottom:16px; flex-wrap:nowrap; }
+  .log-filter-group { display:flex; flex-direction:column; }
+  .log-range-wrap { display:flex; align-items:center; gap:8px; border:1px solid var(--border); border-radius:8px; background:var(--bg); padding:0 10px; }
+  .log-range-wrap .log-input { border:none; background:transparent; padding:9px 0; cursor:pointer; }
+  .log-th { text-align:left; font-size:12px; color: var(--muted); padding: 12px 14px; border-bottom:1px solid var(--border); text-transform: uppercase; font-weight:700; }
+  .log-td { padding: 12px 14px; font-size: 13px; color: var(--text); border-bottom:1px solid var(--border); }
+  .log-empty { padding: 30px; text-align:center; color: var(--muted); font-size: 13px; }
+  
+  .badge-type { display:inline-block; font-size: 11px; font-weight:700; border-radius: 6px; padding: 4px 10px; text-transform: uppercase; }
+  .badge-staff { background: var(--success-bg); color: var(--green); }
+  .badge-unknown { background: #fee2e2; color: #ef4444; }
+
+  .log-img-thumb { width:48px; height:32px; border-radius:6px; object-fit:cover; border:1px solid var(--border); transition: transform 0.2s; cursor:pointer; }
+  .clickable-row { transition: background 0.2s; cursor:pointer; }
+  .clickable-row:hover { background: var(--surface2); }
+  
+  /* Period Toggle Styles */
+  .period-toggle { display: flex; background: var(--surface2); padding: 4px; border-radius: 10px; border: 1px solid var(--border); }
+  .toggle-btn { border: none; background: transparent; padding: 6px 16px; font-size: 13px; font-weight: 600; color: var(--muted); cursor: pointer; border-radius: 7px; transition: all 0.2s; }
+  .toggle-btn.active { background: var(--surface); color: var(--accent); box-shadow: var(--shadow-sm); }
+
+  /* 3-dot Menu */
+  .actions-btn { background:transparent; border:none; color:var(--muted); font-size:18px; padding:4px 8px; cursor:pointer; border-radius:6px; transition: all 0.2s; }
+  .actions-btn:hover { background: var(--bg); color: var(--text); }
+
+  /* Modal Overlay */
+  .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.85); backdrop-filter: blur(8px); display: none; align-items: center; justify-content: center; z-index: 2000; padding: 40px; }
+  .modal-overlay.active { display: flex; }
+  .modal-content-img { background: var(--surface); border-radius: 16px; box-shadow: var(--shadow-lg); border: 1px solid var(--border); overflow: hidden; position: relative; max-width: 90vw; max-height: 90vh; }
+  .modal-content-img img { max-width: 100%; max-height: calc(90vh - 50px); display: block; }
+  .modal-content-details { background: var(--surface); border-radius: 16px; width: 500px; max-width: 95vw; box-shadow: var(--shadow-lg); }
+  .close-overlay, .close-btn { background: none; border: none; font-size: 20px; color: var(--muted); cursor: pointer; transition: color 0.2s; }
+  .close-btn:hover { color: var(--text); }
+  .close-overlay { position: absolute; top: 15px; right: 15px; background: rgba(0,0,0,0.5); color: white; width: 32px; height: 32px; border-radius: 50%; display: flex; align-items: center; justify-content: center; z-index: 5; }
+
+  @media (max-width: 768px) {
+    .log-filter-row { gap:12px; }
+    .log-filter-group { width:100%; }
+    .log-range-wrap { width:100%; }
+  }
+</style>
+
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
+<script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
+
+<script>
+  let logSearchTimer = null;
+  let logCurrentPage = 1;
+  let logPageSize = 20;
+  let logPeriod = 'all';
+  let logSummaryVisible = true;
+
+  function debouncedLoadLogs() {
+    clearTimeout(logSearchTimer);
+    logSearchTimer = setTimeout(() => { logCurrentPage = 1; loadMemberLogs(); }, 300);
+  }
+
+  function setPeriod(p) {
+    logPeriod = p;
+    document.querySelectorAll('.toggle-btn').forEach(b => b.classList.remove('active'));
+    document.getElementById(`period-${p}`).classList.add('active');
+    
+    // Disable date picker if today is active
+    const rangeCont = document.getElementById('date-range-container');
+    const rangeInput = document.getElementById('log-date-range');
+    if (p === 'today') {
+      rangeCont.style.opacity = '0.5';
+      rangeCont.style.pointerEvents = 'none';
+      const today = new Date().toISOString().split('T')[0];
+      if (rangeInput) rangeInput.value = today;
+      if (rangeInput?._flatpickr) rangeInput._flatpickr.setDate(today);
+    } else {
+      rangeCont.style.opacity = '1';
+      rangeCont.style.pointerEvents = 'auto';
+    }
+    
+    resetAndLoadLogs();
+  }
+
+  function toggleLogsSummary() {
+    logSummaryVisible = !logSummaryVisible;
+    const section = document.getElementById('logs-summary');
+    const btn = document.getElementById('toggle-logs-summary-btn');
+    section.style.display = logSummaryVisible ? 'grid' : 'none';
+    btn.innerHTML = logSummaryVisible ? '<span>⌃</span> Hide Summary' : '<span>⌄</span> Show Summary';
+  }
+
+  function resetAndLoadLogs() {
+    logCurrentPage = 1;
+    loadMemberLogs();
+  }
+
+  function openDetails(log) {
+    const modal = document.getElementById('details-modal');
+    const content = document.getElementById('details-content');
+    
+    // Calculate duration
+    let duration = '-';
+    if (log.entry_time !== '-' && log.exit_time !== '-') {
+      try {
+        const s = new Date(log.entry_time);
+        const e = new Date(log.exit_time);
+        const diff = e - s;
+        if (diff > 0) {
+          const mins = Math.floor(diff / 60000);
+          const hrs = Math.floor(mins / 60);
+          const remMins = mins % 60;
+          duration = hrs > 0 ? `${hrs}h ${remMins}m` : `${remMins}m`;
+        }
+      } catch(e) {}
+    }
+
+    content.innerHTML = `
+      <div style="display:grid; grid-template-columns: 1fr 1fr; gap: 24px;">
+        <div style="display: flex; flex-direction: column; gap: 16px;">
+          <div><div class="details-label">Member Name</div><div class="details-value" style="font-size:18px; font-weight:700;">${log.member_name || 'Unknown'}</div></div>
+          <div style="display:grid; grid-template-columns:1fr 1fr; gap:16px;">
+            <div><div class="details-label">Member ID</div><div class="details-value">${log.display_id || '-'}</div></div>
+            <div><div class="details-label">Member Type</div><span class="badge-type ${log.person_type === 'STAFF' ? 'badge-staff' : 'badge-unknown'}">${log.person_type}</span></div>
+          </div>
+          <div style="display:grid; grid-template-columns:1fr 1fr; gap:16px;">
+            <div><div class="details-label">Entry Time</div><div class="details-value">${log.entry_time}</div></div>
+            <div><div class="details-label">Exit Time</div><div class="details-value">${log.exit_time}</div></div>
+          </div>
+          <div><div class="details-label">Stay Duration</div><div class="details-value" style="color:var(--accent); font-weight:700;">${duration}</div></div>
+          <div style="margin-top:24px; display:flex; gap:12px;">
+            <button class="primary-btn" style="flex:1;" onclick="openImageModal('${log.image_path}', '${log.member_name}')">Full Snapshot</button>
+            <button class="secondary-btn" style="flex:1;" onclick="closeDetailsModal()">Close</button>
+          </div>
+        </div>
+        <div style="display:flex; flex-direction:column; gap:20px;">
+          <div>
+            <div class="details-label">Entry Snapshot</div>
+            <div class="details-img-box" style="aspect-ratio: 16/9; border: 1px solid var(--border); border-radius: 12px; overflow: hidden;">
+              ${log.image_path ? `<img src="/${log.image_path}" style="width:100%; height:100%; object-fit:cover;" onclick="openImageModal('${log.image_path}', 'Entry - ${log.member_name}')">` : '<span class="no-img-text">No Entry Image Captured</span>'}
+            </div>
+          </div>
+        </div>
+      </div>
+    `;
+    modal.classList.add('active');
+  }
+
+  function openMemberDetailsPage(log) {
+    const isStaff = (log?.person_type || '').toUpperCase() === 'STAFF';
+    if (!isStaff || !log?.staff_id) {
+      openDetails(log);
+      return;
+    }
+    const params = new URLSearchParams();
+    params.set('member_id', String(log.member_id));
+    if (log.member_name && log.member_name !== '-') params.set('member_name', log.member_name);
+    window.location.href = `/settings/staff?${params.toString()}`;
+  }
+
+  function closeDetailsModal() {
+    document.getElementById('details-modal').classList.remove('active');
+  }
+
+  function openImageModal(url, details) {
+    const modal = document.getElementById('image-modal');
+    const img = document.getElementById('overlay-img');
+    const det = document.getElementById('overlay-details');
+    img.src = url.startsWith('/') ? url : '/' + url;
+    det.textContent = details;
+    modal.classList.add('active');
+  }
+
+  function closeImageModal() {
+    document.getElementById('image-modal').classList.remove('active');
+  }
+
+  function getDateRange() {
+    const rangeInput = document.getElementById('log-date-range');
+    const picker = rangeInput?._flatpickr;
+    if (picker && picker.selectedDates.length) {
+      const from = picker.formatDate(picker.selectedDates[0], "Y-m-d");
+      const to = picker.selectedDates[1] ? picker.formatDate(picker.selectedDates[1], "Y-m-d") : from;
+      return { from, to };
+    }
+    return { from: '', to: '' };
+  }
+
+  function setLogPageSize(val) {
+    logPageSize = parseInt(val, 10) || 20;
+    logCurrentPage = 1;
+    loadMemberLogs();
+  }
+
+  function renderPagination(pagination) {
+    const container = document.getElementById('logs-pagination');
+    if (!container) return;
+    
+    if (!pagination || pagination.total === 0) {
+      container.innerHTML = '';
+      return;
+    }
+
+    const start = (pagination.page - 1) * pagination.limit + 1;
+    const end = Math.min(pagination.page * pagination.limit, pagination.total);
+
+    container.innerHTML = `
+      <div style="display:flex; align-items:center; gap:16px;">
+        <span>Showing ${start} - ${end} of ${pagination.total} detections</span>
+        <div style="display:flex; align-items:center; gap:8px;">
+          <span>Rows per page:</span>
+          <select class="log-input" style="width:78px; padding:4px 6px;" onchange="setLogPageSize(this.value)">
+            <option value="10" ${logPageSize===10?'selected':''}>10</option>
+            <option value="20" ${logPageSize===20?'selected':''}>20</option>
+            <option value="50" ${logPageSize===50?'selected':''}>50</option>
+          </select>
+        </div>
+      </div>
+      <div style="display:flex; align-items:center; gap:8px;">
+        <span style="margin-right:6px;">Page ${pagination.page} / ${pagination.pages}</span>
+        <button class="secondary-btn" style="padding:4px 10px;" onclick="changePage(1)" ${logCurrentPage === 1 ? 'disabled' : ''}>«</button>
+        <button class="secondary-btn" style="padding:4px 10px;" onclick="changePage(${logCurrentPage - 1})" ${logCurrentPage === 1 ? 'disabled' : ''}>‹</button>
+        <button class="secondary-btn" style="padding:4px 10px;" onclick="changePage(${logCurrentPage + 1})" ${logCurrentPage === pagination.pages ? 'disabled' : ''}>›</button>
+        <button class="secondary-btn" style="padding:4px 10px;" onclick="changePage(${pagination.pages})" ${logCurrentPage === pagination.pages ? 'disabled' : ''}>»</button>
+      </div>
+    `;
+  }
+
+  function changePage(page) {
+    logCurrentPage = page;
+    loadMemberLogs();
+  }
+
+  async function loadMemberLogs() {
+    const type = document.getElementById('log-type-filter').value;
+    const q = document.getElementById('log-search').value.trim();
+    const { from, to } = getDateRange();
+    
+    const params = new URLSearchParams({
+      page: logCurrentPage,
+      page_size: logPageSize,
+      period: logPeriod
+    });
+    if (type) params.append('type', type);
+    if (q) params.append('q', q);
+    if (from) params.append('date_from', from + ' 00:00:00');
+    if (to) params.append('date_to', to + ' 23:59:59');
+
+    const tbody = document.getElementById('logs-table-body');
+    tbody.innerHTML = '<tr><td colspan="7" class="log-empty">Loading records...</td></tr>';
+
+    try {
+      const res = await fetch(`/api/general-movement?${params.toString()}`);
+      
+      // Handle non-JSON responses (like auth redirects or 500 errors)
+      const contentType = res.headers.get("content-type");
+      if (!contentType || !contentType.includes("application/json")) {
+        if (res.status === 401) {
+            window.location.href = '/login';
+            return;
+        }
+        throw new Error(`Invalid response from server (${res.status}). Expected JSON but got ${contentType}`);
+      }
+      
+      const result = await res.json();
+      
+      if (result.status !== 'success') throw new Error(result.message || 'Failed to load logs');
+
+      const logs = result.data;
+      const pagination = result.pagination;
+
+      if (logs.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="7" class="log-empty">No detection logs found for the selected filters.</td></tr>';
+      } else {
+        tbody.innerHTML = logs.map(log => {
+          const logJson = JSON.stringify(log).replace(/'/g, "&apos;");
+          return `
+            <tr class="clickable-row">
+              <td class="log-td" style="color:var(--muted); text-align:center;">
+                -
+              </td>
+              <td class="log-td" onclick='openMemberDetailsPage(${logJson})'><span style="font-family:monospace; font-weight:600; color:var(--accent);">${log.display_id || '-'}</span></td>
+              <td class="log-td" onclick='openMemberDetailsPage(${logJson})'><strong>${log.member_name || '-'}</strong></td>
+              <td class="log-td" onclick='openMemberDetailsPage(${logJson})'>
+                <span class="badge-type ${log.person_type === 'STAFF' ? 'badge-staff' : 'badge-unknown'}">
+                  ${log.person_type}
+                </span>
+              </td>
+              <td class="log-td" onclick='openMemberDetailsPage(${logJson})' style="white-space:nowrap;">
+                <div style="font-weight:500;">${log.entry_time.split(' ')[0]}</div>
+                <div style="font-size:11px; color:var(--muted); margin-top:2px;">${log.entry_time.split(' ')[1]}</div>
+              </td>
+              <td class="log-td" onclick='openMemberDetailsPage(${logJson})' style="white-space:nowrap;">
+                <div style="font-weight:500;">${log.exit_time !== '-' ? log.exit_time.split(' ')[0] : '-'}</div>
+                <div style="font-size:11px; color:var(--muted); margin-top:2px;">${log.exit_time !== '-' ? log.exit_time.split(' ')[1] : ''}</div>
+              </td>
+              <td class="log-td" style="text-align:center;">
+                <button class="actions-btn" onclick='openMemberDetailsPage(${logJson})'>⋮</button>
+              </td>
+            </tr>
+          `;
+        }).join('');
+      }
+
+      document.getElementById('count-total').textContent = pagination.total;
+      document.getElementById('count-staff').textContent = result.counts ? result.counts.staff : 0;
+      document.getElementById('count-unknown').textContent = result.counts ? result.counts.unknown : 0;
+      renderPagination(pagination);
+
+    } catch (e) {
+      tbody.innerHTML = `<tr><td colspan="7" class="log-empty" style="color:#ef4444;">Error: ${e.message}</td></tr>`;
+    }
+  }
+
+  function exportLogs() {
+    const type = document.getElementById('log-type-filter').value;
+    const q = document.getElementById('log-search').value.trim();
+    const { from, to } = getDateRange();
+    
+    const params = new URLSearchParams({ period: logPeriod });
+    if (type) params.append('type', type);
+    if (q) params.append('q', q);
+    if (from) params.append('date_from', from + ' 00:00:00');
+    if (to) params.append('date_to', to + ' 23:59:59');
+    
+    window.location.href = `/api/general-movement/export?${params.toString()}`;
+  }
+
+  document.addEventListener('DOMContentLoaded', () => {
+    flatpickr("#log-date-range", {
+      mode: "range",
+      dateFormat: "Y-m-d",
+      onClose: () => { resetAndLoadLogs(); }
+    });
+    loadMemberLogs();
+  });
+</script>
+{% endblock %}

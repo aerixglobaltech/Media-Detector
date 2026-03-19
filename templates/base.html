@@ -112,6 +112,10 @@
         {{ nav_tab('Member Directory', '👤', active=(sub_page == 'members'), url='/settings/members') }}
         {% endif %}
 
+        {% if perms.all or perms.general_movement_view or perms is not defined or not perms %}
+        {{ nav_tab('General movement', '🚶', active=(active_page == 'general_movement'), url='/general-movement') }}
+        {% endif %}
+
         {% if perms.all or perms.member_logs_view or perms is not defined or not perms %}
         {{ nav_tab('Member Logs', '📋', active=(active_page == 'member_logs'), url='/member-logs') }}
         {% endif %}
