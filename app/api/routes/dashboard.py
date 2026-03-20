@@ -100,3 +100,8 @@ def route_settings_roles():
 @login_required
 def route_settings_appearance():
     return render_template("settings/appearance.html")
+
+@dashboard_bp.route("/general-movement")
+@login_required
+def route_general_movement():
+    return render_template("general_movement.html")
