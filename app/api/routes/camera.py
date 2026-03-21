@@ -305,6 +305,8 @@ def video_feed():
     return Response(generate(), mimetype="multipart/x-mixed-replace; boundary=frame")
 
 
+
+
 # ─── Local camera CRUD ────────────────────────────────────────────────────────
 
 @camera_bp.route("/api/local_cameras", methods=["GET", "POST"])

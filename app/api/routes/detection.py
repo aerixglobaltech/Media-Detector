@@ -30,17 +30,18 @@ import logging
 import os
 import shutil
 
-from flask import Blueprint, jsonify, request, session, url_for
+from flask import Blueprint, jsonify, request, session, url_for, Response
 from werkzeug.utils import secure_filename
 from datetime import datetime
 import cv2
 import numpy as np
 import io
+import time
 
 from app.core.security import login_required
 from app.db.session import get_db_connection
 from app.core.extensions import cam_mgr, notifier, AI_TOGGLES
-from app.api.routes.camera import get_all_cameras
+from app.api.routes.camera import get_all_cameras, _generate_mjpeg, _build_rtsp_url, APP_ID, APP_SECRET
 
 log = logging.getLogger("api")
 
@@ -533,6 +534,63 @@ def api_upload_staff():
         log.warning("Could not reload faces: %s", e)
 
     return jsonify({"success": True, "saved_count": saved_count})
+
+
+@api_bp.route("/api/camera_preview_stream/<cam_id>")
+def camera_preview_stream(cam_id: str):
+    """
+    MJPEG stream for a specific camera (lightweight, no AI processing by default).
+    Used for grid previews.
+    """
+    user_email = session.get("user")
+    cameras = get_all_cameras(user_email=user_email)
+    cam = next((c for c in cameras if str(c["id"]) == str(cam_id)), None)
+
+    if cam is None:
+        return Response("Camera not found", status=404)
+
+    # If this specific camera is already the ACTIVE one in CameraManager,
+    # serve the frames directly from CameraManager. This is MUCH better:
+    # 1. No double-opening the camera (critical for webcams).
+    # 2. Includes the AI overlays (even better for the grid!).
+    if cam_mgr._active and cam_mgr.camera_name == cam["name"]:
+        def generate_from_mgr():
+            while True:
+                frame = cam_mgr.get_jpeg()
+                if frame:
+                    yield b"--frame\r\nContent-Type: image/jpeg\r\n\r\n" + frame + b"\r\n"
+                time.sleep(0.04)
+        return Response(generate_from_mgr(), mimetype="multipart/x-mixed-replace; boundary=frame")
+
+    # Otherwise, open a temporary stream
+    rtsp_url = None
+    if cam["type"] == "webcam":
+        rtsp_url = 0
+    elif cam["type"] == "imou":
+        try:
+            from app.services.ai.imou_connector import ImouAPI
+            api = ImouAPI(APP_ID, APP_SECRET, cam["base"])
+            api.get_token()
+            rtsp_url = api.get_rtsp(cam["dev_id"])
+        except: pass
+    elif cam["type"] == "local":
+        try:
+            db_id = cam_id.replace("local_", "")
+            conn  = get_db_connection()
+            cur   = conn.cursor()
+            cur.execute("SELECT ip_address, port, username, password, stream_path FROM local_cameras WHERE id = %s", (db_id,))
+            row = cur.fetchone()
+            cur.close()
+            conn.close()
+            if row:
+                rtsp_url = _build_rtsp_url(row["ip_address"], row["port"], row["username"], row["password"], row["stream_path"])
+        except: pass
+
+    if rtsp_url is None:
+        return Response("Stream unavailable", status=500)
+
+    # Use _generate_mjpeg which takes an RTSP URL/source and yields MJPEG frames
+    return Response(_generate_mjpeg(rtsp_url, max_duration_sec=300), mimetype="multipart/x-mixed-replace; boundary=frame")
 
 
 @api_bp.route("/api/staff_profiles", methods=["GET"])

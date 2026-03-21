@@ -442,25 +442,31 @@
         // ─── Load camera list ──────────────────────────────────────────────
         async function loadCameras() {
           const list = document.getElementById('camera-list');
-          list.innerHTML = '<div class="loading-cameras"><div class="spinner"></div>Loading cameras…</div>';
+          if (list) list.innerHTML = '<div class="loading-cameras"><div class="spinner"></div>Loading cameras…</div>';
+          
+          const grid = document.getElementById('camera-grid');
+          if (grid) grid.innerHTML = '<div class="loading-cameras"><div class="spinner"></div>Loading camera previews…</div>';
+
           try {
-            // Use refresh=1 and timestamp to bypass all caches
             const res = await fetch('/api/cameras?refresh=1&t=' + Date.now());
             const cams = await res.json();
-            renderCameras(cams);
+            
+            if (list) renderCameras(cams);
+            if (grid) renderGrid(cams);
 
-            // Re-select active camera to refresh its video stream
             if (activeCamId) {
               const active = cams.find(c => String(c.id) == String(activeCamId));
               if (active) selectCamera(active.id, active.name, true);
             }
           } catch (e) {
-            list.innerHTML = '<div class="loading-cameras">⚠️ Could not load cameras</div>';
+            if (list) list.innerHTML = '<div class="loading-cameras">⚠️ Could not load cameras</div>';
+            if (grid) grid.innerHTML = '<div class="loading-cameras">⚠️ Could not load grid</div>';
           }
         }
 
         function renderCameras(cams) {
           const list = document.getElementById('camera-list');
+          if (!list) return;
           if (!cams || !Array.isArray(cams) || !cams.length) {
             list.innerHTML = '<div class="loading-cameras">No cameras found</div>';
             return;
@@ -478,7 +484,6 @@
               ? `${c.brand ? c.brand + ' · ' : ''}${c.ip || ''}`
               : (c.type === 'webcam' ? 'Built-in / USB' : '');
             
-            // Use loose equality (==) because activeCamId might be string while c.id is integer
             const isActive = (c.id == activeCamId);
 
             return `
@@ -497,19 +502,125 @@
           }).join('');
         }
 
+        function renderGrid(cams) {
+          const grid = document.getElementById('camera-grid');
+          if (!grid) return;
+          if (!cams || !Array.isArray(cams) || !cams.length) {
+            grid.innerHTML = '<div class="loading-cameras">No cameras found</div>';
+            return;
+          }
+
+          grid.innerHTML = cams.map(c => {
+            const isOnline = c.status && c.status.includes('Online');
+            const dot = isOnline ? 'dot-green' : 'dot-red';
+            const streamUrl = `/api/camera_preview_stream/${c.id}?t=${Date.now()}`;
+            
+            return `
+              <div class="grid-card" onclick="selectCamera('${c.id}','${c.name}')">
+                <div class="grid-video-wrapper">
+                  <div class="grid-badge">LIVE</div>
+                  <img class="grid-stream" src="${streamUrl}" alt="${c.name}">
+                  <button class="card-expand-btn" onclick="event.stopPropagation(); selectCamera('${c.id}','${c.name}')" title="Expand this camera">
+                    <span>⛶</span>
+                  </button>
+                </div>
+                <div class="grid-card-info">
+                  <div class="grid-card-name">${c.name}</div>
+                  <div class="grid-card-status">
+                    <span class="dot ${dot}"></span>
+                    ${c.type === 'local' ? c.ip : 'Active'}
+                  </div>
+                </div>
+              </div>
+            `;
+          }).join('');
+        }
+
+        function showGrid(forceRefresh = false) {
+          const gridView = document.getElementById('camera-grid-view');
+          const focus = document.getElementById('focused-view');
+          if (gridView && focus) {
+            gridView.style.display = 'block';
+            focus.style.display = 'none';
+            // Stop high-res camera
+            stopCamera();
+            // Only refresh if explicitly asked or if grid is empty
+            if (forceRefresh || !document.getElementById('camera-grid').innerHTML.trim()) {
+              loadCameras();
+            }
+          }
+        }
+
+        function toggleGridFullscreen() {
+          const container = document.querySelector('.video-area');
+          const isFull = document.body.classList.toggle('grid-fullscreen-active');
+          const icon = document.querySelector('.fs-icon');
+          
+          if (isFull) {
+            if (icon) icon.textContent = '❌';
+            if (container.requestFullscreen) {
+              container.requestFullscreen();
+            } else if (container.webkitRequestFullscreen) {
+              container.webkitRequestFullscreen();
+            }
+          } else {
+            if (icon) icon.textContent = '⛶';
+            if (document.fullscreenElement) {
+              document.exitFullscreen();
+            }
+          }
+        }
+        
+        document.addEventListener('fullscreenchange', () => {
+          if (!document.fullscreenElement) {
+            document.body.classList.remove('grid-fullscreen-active');
+            const icon = document.querySelector('.fs-icon');
+            if (icon) icon.textContent = '⛶';
+            // Return to grid when exiting fullscreen, but without re-loading
+            showGrid(false);
+          }
+        });
+
         // -- Select & start camera -------------------------------------------------
         async function selectCamera(id, name, force = false) {
-          if (activeCamId === id && !force) return;
+          if (activeCamId === id && !force) {
+            // If already active, just switch view and return
+            const gridView = document.getElementById('camera-grid-view');
+            const focus = document.getElementById('focused-view');
+            if (gridView && focus) {
+              gridView.style.display = 'none';
+              focus.style.display = 'block';
+            }
+            return;
+          }
+
+          // Switch views
+          const gridView = document.getElementById('camera-grid-view');
+          const focus = document.getElementById('focused-view');
+          if (gridView && focus) {
+            gridView.style.display = 'none';
+            focus.style.display = 'block';
+          }
 
           document.querySelectorAll('.cam-item').forEach(el => el.classList.remove('active'));
           const el = document.getElementById(`cam-${id}`);
           if (el) el.classList.add('active');
 
           const img = document.getElementById('stream-img');
-          img.classList.remove('visible');
           const ph = document.getElementById('placeholder');
-          ph.style.display = 'flex';
-          ph.querySelector('p').textContent = 'Connecting to camera...';
+          
+          // INSTANT TRANSITION: 
+          // If we have a preview for this camera in the grid, use it IMMEDIATELY
+          const gridImg = document.querySelector(`.grid-card[onclick*="'${id}'"] .grid-stream`);
+          if (gridImg && gridImg.src) {
+            img.src = gridImg.src;
+            img.classList.add('visible');
+            ph.style.display = 'none';
+          } else {
+            img.classList.remove('visible');
+            ph.style.display = 'flex';
+            ph.querySelector('p').textContent = 'Connecting to camera...';
+          }
 
           try {
             const res = await fetch('/api/select', {
@@ -518,15 +629,23 @@
               body: JSON.stringify({ id }),
             });
             const data = await res.json();
-            if (data.error) { ph.querySelector('p').textContent = 'Error: ' + data.error; return; }
+            if (data.error) { 
+              if (ph.style.display !== 'none') ph.querySelector('p').textContent = 'Error: ' + data.error; 
+              return; 
+            }
 
             activeCamId = id;
 
-            // Use unique URL to force a new MJPEG connection every time
-            img.src = '/video_feed?cam=' + encodeURIComponent(id) + '&t=' + Date.now();
+            // Wait a tiny bit for the backend to switch sources reliably
+            setTimeout(() => {
+              img.src = '/video_feed?cam=' + encodeURIComponent(id) + '&t=' + Date.now();
+              img.classList.add('visible');
+              ph.style.display = 'none';
+            }, 100);
             img.classList.add('visible');
             ph.style.display = 'none';
-            ph.querySelector('p').textContent = 'Select a camera from the left panel to begin';
+            // Reset placeholder text
+            ph.querySelector('p').textContent = 'Connecting to camera...';
 
             document.getElementById('live-badge').style.display = 'block';
             document.getElementById('cam-label').style.display = 'block';
