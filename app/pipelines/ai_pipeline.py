@@ -125,6 +125,7 @@ class AIPipeline(threading.Thread):
         )
 
         self.camera_name = "Camera"  # Safe default to avoid AttributeError
+        self.camera_roles = []       # Active roles for current camera (entry, exit, general)
 
         # Multi-worker executors to handle many people in parallel
         self._emotion_executor = ThreadPoolExecutor(max_workers=2, thread_name_prefix="emotion")
@@ -585,6 +586,9 @@ class AIPipeline(threading.Thread):
                     if td["missing_count"] > 15:
                         self.exits += 1
                         if td["logged"]:
+                            # ROLE CHECK: Only log EXIT if the camera has the 'exit' role
+                            is_exit_cam = "exit" in [r.lower() for r in self.camera_roles]
+                            
                             exit_image_path = ""
                             best_full = td.get("best_full")
                             if best_full is not None:
@@ -594,15 +598,18 @@ class AIPipeline(threading.Thread):
                                 cv2.imwrite(exit_image_path, best_full)
                                 exit_image_path = f"static/uploads/movement/{exit_filename}"
 
-                            from app.services.attendance_service import update_exit_logs
-                            update_exit_logs(
-                                member_id=td.get("db_id"),
-                                movement_id=None, 
-                                exit_image=exit_image_path,
-                                merged_image="",
-                                track_id=tid
-                            )
-                            log.info(f"AI: Logged Exit for Track {tid} (Evidence: {exit_image_path})")
+                            if is_exit_cam:
+                                from app.services.attendance_service import update_exit_logs
+                                update_exit_logs(
+                                    member_id=td.get("db_id"),
+                                    movement_id=None, 
+                                    exit_image=exit_image_path,
+                                    merged_image="",
+                                    track_id=tid
+                                )
+                                log.info(f"AI: Logged Formal Exit for Track {tid} (Evidence: {exit_image_path}) on Exit Camera")
+                            else:
+                                log.info(f"AI: Track {tid} disappeared, but Camera {self.camera_name} is NOT an Exit role. Skipping formal logs.")
                         
                         # Cleanup memory
                         del self.track_data[tid]
@@ -626,7 +633,12 @@ class AIPipeline(threading.Thread):
                 
                 # Update Attendance Tracker (Heartbeat)
                 if identity != "Unknown":
-                    self.attendance_tracker.heartbeat(identity, self.camera_name)
+                    # Only send heartbeats if 'general' role is assigned (default to True if roles empty for backward compatibility?)
+                    # Requirement says: "Assign one camera to all roles... Assign different cameras for different roles"
+                    # We'll treat a camera as a General Monitoring camera if it has 'general' role OR NO roles assigned (legacy).
+                    is_general = (not self.camera_roles) or ("general" in [r.lower() for r in self.camera_roles])
+                    if is_general:
+                        self.attendance_tracker.heartbeat(identity, self.camera_name, roles=self.camera_roles)
                     
                 clarity = td.get("best_clarity", 0)
                 if identity == "Unknown":

@@ -439,6 +439,80 @@
           } catch (e) { }
         }
 
+        // --- Role Management ---
+        let currentMenuCamId = null;
+        function openRoleMenu(event, camId, existingRoles) {
+          event.stopPropagation();
+          currentMenuCamId = camId;
+          const menu = document.getElementById('role-menu-popup');
+          
+          const roles = ['Entry', 'Exit', 'General'];
+          menu.innerHTML = `
+            <div class="role-menu-header">Camera Roles</div>
+            <div class="role-options">
+              ${roles.map(r => `
+                <label class="role-option">
+                  <input type="checkbox" value="${r}" ${existingRoles.includes(r) ? 'checked' : ''} onchange="saveRoles()">
+                  <span>${r}</span>
+                </label>
+              `).join('')}
+            </div>
+          `;
+          
+          const rect = event.target.getBoundingClientRect();
+          menu.style.display = 'block';
+          
+          // Smart positioning
+          let top = rect.bottom + window.scrollY;
+          let left = rect.left - 120 + window.scrollX;
+          
+          // Keep on screen
+          if (left < 10) left = 10;
+          if (left + 200 > window.innerWidth) left = window.innerWidth - 210;
+          
+          menu.style.top = `${top}px`;
+          menu.style.left = `${left}px`;
+          
+          // Close on outside click
+          setTimeout(() => {
+            document.addEventListener('click', function _close(e) {
+              if (!menu.contains(e.target)) {
+                closeRoleMenu();
+                document.removeEventListener('click', _close);
+              }
+            });
+          }, 0);
+        }
+
+        function closeRoleMenu() {
+          const menu = document.getElementById('role-menu-popup');
+          if (menu) menu.style.display = 'none';
+        }
+
+        async function saveRoles() {
+          const menu = document.getElementById('role-menu-popup');
+          const checkboxes = menu.querySelectorAll('input[type="checkbox"]:checked');
+          const roles = Array.from(checkboxes).map(cb => cb.value);
+          
+          if (!currentMenuCamId) return;
+          
+          try {
+            const res = await fetch(`/api/cameras/${currentMenuCamId}/roles`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ roles })
+            });
+            const data = await res.json();
+            if (data.success) {
+              loadCameras(); // Reload to show new tags
+            } else {
+              alert('Error: ' + (data.error || 'Unknown error'));
+            }
+          } catch (e) {
+            console.error('Error saving roles:', e);
+          }
+        }
+
         // ─── Load camera list ──────────────────────────────────────────────
         async function loadCameras() {
           const list = document.getElementById('camera-list');
@@ -485,18 +559,25 @@
               : (c.type === 'webcam' ? 'Built-in / USB' : '');
             
             const isActive = (c.id == activeCamId);
+            const rolesHtml = (c.roles || []).map(r => `<span class="role-text-tag">${r}</span>`).join('');
 
             return `
         <div class="cam-item ${isActive ? 'active' : ''}"
              id="cam-${c.id}" onclick="selectCamera('${c.id}','${c.name}')">
           <div class="cam-icon">${icon}</div>
           <div class="cam-info">
-            <div class="cam-name">${c.name}</div>
+            <div class="cam-name">
+              ${c.name}
+              <div class="cam-roles-tags">${rolesHtml}</div>
+            </div>
             <div class="cam-status">
               <span class="dot ${dot}"></span>
               ${sub || c.status || 'Available'}
             </div>
           </div>
+          <button class="cam-menu-btn" onclick="event.stopPropagation(); openRoleMenu(event, '${c.id}', ${JSON.stringify(c.roles || [])})">
+            ⋮
+          </button>
           ${isActive ? '<div class="active-indicator"></div>' : ''}
         </div>`;
           }).join('');
@@ -514,6 +595,7 @@
             const isOnline = c.status && c.status.includes('Online');
             const dot = isOnline ? 'dot-green' : 'dot-red';
             const streamUrl = `/api/camera_preview_stream/${c.id}?t=${Date.now()}`;
+            const rolesHtml = (c.roles || []).map(r => `<span class="role-text-tag">${r}</span>`).join('');
             
             return `
               <div class="grid-card" onclick="selectCamera('${c.id}','${c.name}')">
@@ -525,7 +607,13 @@
                   </button>
                 </div>
                 <div class="grid-card-info">
-                  <div class="grid-card-name">${c.name}</div>
+                  <div class="grid-card-name">
+                    ${c.name}
+                    <div class="cam-roles-tags">${rolesHtml}</div>
+                  </div>
+                  <button class="cam-menu-btn" onclick="event.stopPropagation(); openRoleMenu(event, '${c.id}', ${JSON.stringify(c.roles || [])})">
+                    ⋮
+                  </button>
                   <div class="grid-card-status">
                     <span class="dot ${dot}"></span>
                     ${c.type === 'local' ? c.ip : 'Active'}
@@ -808,6 +896,6 @@
           }
         });
       </script>
-</body>
+<div id="role-menu-popup" class="role-menu-popup" onclick="event.stopPropagation()"></div>`n</body>
 
 </html>

@@ -214,9 +214,17 @@ def init_db() -> None:
                 username     VARCHAR(255),
                 password     VARCHAR(255),
                 stream_path  VARCHAR(500),
-                owner_email  VARCHAR(255)
+                owner_email  VARCHAR(255),
+                roles        JSONB DEFAULT '[]'
             )
         """, "Local Cameras")
+
+        run_block("""
+            CREATE TABLE IF NOT EXISTS camera_metadata (
+                camera_id    VARCHAR(100) PRIMARY KEY,
+                roles        JSONB DEFAULT '[]'
+            )
+        """, "Camera Metadata Table")
 
         # 4. Personnel & Tracking
         run_block("""
@@ -502,6 +510,9 @@ def init_db() -> None:
             # Ensure staff_name exists in both tables
             for table in ["member_timestamp", "movement_log"]:
                 cur.execute(f"ALTER TABLE {table} ADD COLUMN IF NOT EXISTS staff_name VARCHAR(100)")
+            
+            # Ensure roles column exists in local_cameras
+            cur.execute("ALTER TABLE local_cameras ADD COLUMN IF NOT EXISTS roles JSONB DEFAULT '[]'")
             
             # Remove person_id if it exists (cleanup)
             for table in ["member_timestamp", "movement_log"]:

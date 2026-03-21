@@ -79,7 +79,7 @@ class CameraManager:
 
     # ── Start / Stop ──────────────────────────────────────────────────────────
 
-    def start(self, source, name: str = "Camera") -> None:
+    def start(self, source, name: str = "Camera", **kwargs) -> None:
         """Switch to a new camera source — models are NOT reloaded."""
         self.stop_stream()     # stop old video + render thread only
 
@@ -87,6 +87,7 @@ class CameraManager:
         self.camera_name = name
         if self._pipeline:
             self._pipeline.camera_name = name
+            self._pipeline.camera_roles = kwargs.get("roles", [])
         self._active          = True
         self._render_stop_evt = threading.Event()
         self.stream_id       += 1   # frontend polls this to detect camera switches

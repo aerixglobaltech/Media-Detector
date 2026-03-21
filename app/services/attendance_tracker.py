@@ -68,7 +68,7 @@ class AttendanceTracker:
 
     # ── Public API ────────────────────────────────────────────────────────────
 
-    def heartbeat(self, identity: str, camera_name: str) -> None:
+    def heartbeat(self, identity: str, camera_name: str, roles: list[str] = []) -> None:
         """
         Called by the pipeline on every frame where `identity` is visible.
         Records the sighting and triggers an IN event if they were OUT.
@@ -85,11 +85,15 @@ class AttendanceTracker:
             prev_state = self._state.get(identity)
 
         if prev_state != "IN":
-            # Transition OUT→IN (or first sighting)
-            self._record_event(identity, "IN", camera_name, now_wall)
-            with self._lock:
-                self._state[identity] = "IN"
-                self._entry_time[identity] = now_mono
+            # ROLE CHECK: Only transition OUT→IN if camera is an Entry camera
+            is_entry = (not roles) or ("entry" in [r.lower() for r in roles])
+            if is_entry:
+                self._record_event(identity, "IN", camera_name, now_wall)
+                with self._lock:
+                    self._state[identity] = "IN"
+                    self._entry_time[identity] = now_mono
+            else:
+                log.debug(f"AT: Heartbeat for {identity} on non-entry camera {camera_name}. Staying in OUT/None state but updating last_seen.")
 
     def stop(self) -> None:
         self._stop_evt.set()
@@ -166,8 +170,31 @@ class AttendanceTracker:
                 "%s declared OUT after %.0fs absence (timeout=%ds)",
                 identity, elapsed, timeout_sec,
             )
-            self._record_event(identity, "OUT", camera, now_wall,
-                               entry_mono=entry_t, notify=notify_exit)
+            
+            # ROLE CHECK: Only record OUT event if the last camera seen on was an EXit camera
+            # This is a bit tricky if they were last seen on a General camera...
+            # But the requirement says "Exit detection should trigger only from cameras assigned as 'Exit'."
+            # Let's check roles for the camera where they were last seen.
+            # Wait, we don't have roles in self._camera. We should probably store them or fetch them.
+            # For now, let's assume if it wasn't an Exit camera, we just mark them as OUT in memory but don't log a formal event?
+            # Actually, standard behavior is usually best here unless specified otherwise.
+            # I'll fetch roles for the camera.
+            
+            last_cam_roles = []
+            try:
+                from app.api.routes.camera import get_all_cameras
+                all_cams = get_all_cameras()
+                cam_info = next((c for c in all_cams if c["name"] == camera), None)
+                if cam_info:
+                    last_cam_roles = cam_info.get("roles", [])
+            except: pass
+            
+            is_exit_cam = "exit" in [r.lower() for r in last_cam_roles]
+            if is_exit_cam:
+                self._record_event(identity, "OUT", camera, now_wall,
+                                   entry_mono=entry_t, notify=notify_exit)
+            else:
+                log.info(f"AT: {identity} disappeared from non-exit camera {camera}. Marking OUT in memory only.")
 
             with self._lock:
                 self._state[identity] = "OUT"

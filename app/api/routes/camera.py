@@ -175,12 +175,24 @@ def get_all_cameras(force: bool = False, user_email: str | None = None) -> list[
 
     with _camera_lock:
         if force or (time.time() - _camera_cache_ts) >= 60 or not _camera_cache:
-            base_cams = [{"id": "webcam", "name": "Webcam (Built-in)", "status": "🟢 Online", "type": "webcam"}]
-            # Imou cloud fetching disabled per user request
-            # base_cams.extend(_fetch_imou_cameras())
+            base_cams = [{"id": "webcam", "name": "Webcam (Built-in)", "status": "🟢 Online", "type": "webcam", "roles": []}]
+            
+            # Fetch roles for base_cams from camera_metadata
+            try:
+                conn = get_db_connection()
+                cur = conn.cursor()
+                cur.execute("SELECT camera_id, roles FROM camera_metadata")
+                meta_map = {row["camera_id"]: row["roles"] for row in cur.fetchall()}
+                cur.close()
+                conn.close()
+                for c in base_cams:
+                    c["roles"] = meta_map.get(c["id"], [])
+            except Exception as e:
+                log.error("Error fetching camera_metadata for base: %s", e)
+
             _camera_cache    = base_cams
             _camera_cache_ts = time.time()
-        cameras = list(_camera_cache)
+        cameras = [dict(c) for c in _camera_cache] # Deep copy dicts
 
     # Append user-specific local cameras from database
     if user_email:
@@ -188,7 +200,7 @@ def get_all_cameras(force: bool = False, user_email: str | None = None) -> list[
             conn = get_db_connection()
             cur  = conn.cursor()
             cur.execute(
-                "SELECT id, name, brand, ip_address FROM local_cameras WHERE owner_email = %s",
+                "SELECT id, name, brand, ip_address, roles FROM local_cameras WHERE owner_email = %s",
                 (user_email,),
             )
             for row in cur.fetchall():
@@ -199,6 +211,7 @@ def get_all_cameras(force: bool = False, user_email: str | None = None) -> list[
                     "type":   "local",
                     "brand":  row["brand"],
                     "ip":     row["ip_address"],
+                    "roles":   row["roles"] if row["roles"] else [],
                 })
             cur.close()
             conn.close()
@@ -219,6 +232,45 @@ def api_cameras():
     return jsonify(cameras)
 
 
+@camera_bp.route("/api/cameras/<cam_id>/roles", methods=["POST"])
+def api_camera_roles(cam_id):
+    """Update roles for a specific camera (JSONB)."""
+    try:
+        data = request.get_json(force=True)
+        roles = data.get("roles", [])
+        if not isinstance(roles, list):
+            return jsonify({"error": "Roles must be a list"}), 400
+
+        import json
+        roles_json = json.dumps(roles)
+        conn = get_db_connection()
+        cur = conn.cursor()
+
+        if cam_id.startswith("local_"):
+            db_id = cam_id.replace("local_", "")
+            cur.execute("UPDATE local_cameras SET roles = %s WHERE id = %s", (roles_json, db_id))
+        else:
+            # For webcam or other non-localIDs, use camera_metadata
+            cur.execute("""
+                INSERT INTO camera_metadata (camera_id, roles) 
+                VALUES (%s, %s) 
+                ON CONFLICT (camera_id) DO UPDATE SET roles = EXCLUDED.roles
+            """, (cam_id, roles_json))
+        
+        conn.commit()
+        cur.close()
+        conn.close()
+        
+        # Clear cache to reflect changes
+        global _camera_cache_ts
+        _camera_cache_ts = 0
+        
+        return jsonify({"success": True, "roles": roles})
+    except Exception as e:
+        log.error("Error updating camera roles: %s", e)
+        return jsonify({"error": str(e)}), 500
+
+
 @camera_bp.route("/api/select", methods=["POST"])
 def api_select():
     data   = request.get_json(force=True)
@@ -231,7 +283,7 @@ def api_select():
         return jsonify({"error": "Camera not found"}), 404
 
     if cam["type"] == "webcam":
-        cam_mgr.start(0, cam["name"])
+        cam_mgr.start(0, cam["name"], roles=cam.get("roles", []))
 
     elif cam["type"] == "imou":
         try:
@@ -242,7 +294,7 @@ def api_select():
             stream_url = api.get_rtsp(cam["dev_id"])
             if not stream_url:
                 return jsonify({"error": "Could not get stream URL from Imou"}), 500
-            cam_mgr.start(stream_url, cam["name"])
+            cam_mgr.start(stream_url, cam["name"], roles=cam.get("roles", []))
         except Exception as e:
             log.error("Imou start error: %s", e)
             return jsonify({"error": str(e)}), 500
@@ -273,7 +325,7 @@ def api_select():
                 rtsp_url = f"rtsp://{ip}:{port}{path}"
 
             log.info("Starting local RTSP: %s", rtsp_url)
-            cam_mgr.start(rtsp_url, cam["name"])
+            cam_mgr.start(rtsp_url, cam["name"], roles=cam.get("roles", []))
         except Exception as e:
             log.error("Local camera start error: %s", e)
             return jsonify({"error": str(e)}), 500
