@@ -126,9 +126,9 @@ class AIPipeline(threading.Thread):
 
         self.camera_name = "Camera"  # Safe default to avoid AttributeError
 
-        # Single-worker executors keep heavy models off the tracker loop
-        self._emotion_executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="emotion")
-        self._rec_executor     = ThreadPoolExecutor(max_workers=1, thread_name_prefix="rec")
+        # Multi-worker executors to handle many people in parallel
+        self._emotion_executor = ThreadPoolExecutor(max_workers=2, thread_name_prefix="emotion")
+        self._rec_executor     = ThreadPoolExecutor(max_workers=4, thread_name_prefix="rec")
         self._emotion_futures: dict[int, Future] = {}
         self._rec_futures:     dict[int, Future] = {}
 
@@ -233,6 +233,10 @@ class AIPipeline(threading.Thread):
             try:
                 # Local re-detection of face inside the person box
                 face_bbox = self.face_det.detect_in_crop(ai_frame, bbox)
+                
+                # FALLBACK: If standard detector fails, try a lower threshold for side-profiles (0.3)
+                if not face_bbox:
+                    face_bbox = self.face_det.detect_in_crop(ai_frame, bbox, threshold=0.3)
                 if face_bbox:
                     fx1, fy1, fx2, fy2 = (int(v) for v in face_bbox)
                     face_crop = ai_frame[max(0,fy1):min(ai_frame.shape[0],fy2), max(0,fx1):min(ai_frame.shape[1],fx2)]
@@ -254,13 +258,20 @@ class AIPipeline(threading.Thread):
                                 votes[name] = votes.get(name, 0) + 1
                                 td["id_votes"] = votes
                                 
-                                # If we have 2 consistent votes, or 1 decent vote with good clarity, confirm it
-                                if votes[name] >= 2 or (votes[name] >= 1 and td.get("best_clarity", 0) > 250):
+                                # IDENTITY OVERRIDE: If a name gets 2+ votes OR is high confidence, update it
+                                is_better = (votes.get(name, 0) > votes.get(td.get("identity"), 0))
+                                if votes[name] >= 2 or is_better:
+                                    old_id = td.get("identity", "Unknown")
                                     td["identity"] = name
                                     td["staff_db_id"] = res.get("id")
                                     td["display_id"] = f"{name} (#{tid})"
-                                    td["recognized"] = True # Confirmed
-                                    log.info(f"AI: [VOTING] Confirmed {name} for Track {tid} ({votes[name]} votes, Clarity: {td.get('best_clarity', 0):.0f})")
+                                    td["recognized"] = True
+
+                                    # UPDATE DATABASE (LATE SYNC)
+                                    if td.get("db_id") and (old_id != name):
+                                        from app.services.attendance_service import update_person_identity
+                                        log.info(f"AI: [AUTO-CORRECT] {old_id} -> {name} for Track {tid}")
+                                        update_person_identity(member_id=td["db_id"], staff_id=td["staff_db_id"], staff_name=name)
                         
                         return res.get("name", "Unknown")
             except Exception as e:
@@ -288,10 +299,10 @@ class AIPipeline(threading.Thread):
             self._frame_idx += 1
             now = time.monotonic()
             
-            # 0. Periodic Face Reload (Every 2 minutes)
+            # 0. Periodic Face Reload (Every 2 minutes) - Async so it doesn't stop YOLO
             if now - self._last_face_reload > 120:
-                log.info("AI: Reloading staff faces from folder...")
-                self.face_rec.load_from_folder(self.face_rec.db_path)
+                log.info("AI: Triggering background reload of staff faces...")
+                self._rec_executor.submit(self.face_rec.load_from_folder, self.face_rec.db_path)
                 self._last_face_reload = now
 
             ai_h, ai_w = ai_frame.shape[:2]
@@ -468,9 +479,9 @@ class AIPipeline(threading.Thread):
 
                 # B. Recognition Trigger...
 
-                # D. Entry Logging (Delayed to allow recognition to catch up)
-                # We wait until frame 30 before committing to an "UNKNOWN" label
-                if not td["logged"] and (td["recognized"] or len(td["frames"]) >= 30):
+                # D. Entry Logging (IMMEDIATE: Log first, name later)
+                # We log as soon as we have 1 stable frame to ensure the table is updated first
+                if not td["logged"] and len(td["frames"]) >= 1:
                     # STRICT CLARITY: User wants clear photos, but 100 is a safe floor
                     if td["best_clarity"] < 100:
                         log.debug(f"AI: Skipping Entry log for Track {tid} - Low Clarity ({td['best_clarity']:.1f})")
@@ -644,13 +655,13 @@ class AIPipeline(threading.Thread):
                         is_unknown = (identity == "" or identity == "Unknown")
                         active_rec_tasks = sum(1 for f in self._rec_futures.values() if not f.done())
                         # Re-verify every 100 frames (approx 3-5 seconds) even if already recognized
-                        # This prevents "sticky" false positives from persisting if the tracker swaps.
                         if (is_unknown or (self._frame_idx % 100 == 0)) and active_rec_tasks < 2:
                             self._submit_rec(ai_frame, bbox, tid)
                         
-                        self.notifier.notify_person(tid, self.camera_name, action)
+                        # NON-BLOCKING TELEGRAM: Run in executor so YOLO doesn't stop
+                        self._rec_executor.submit(self.notifier.notify_person, tid, self.camera_name, action)
                     except Exception as e:
-                        log.error("Notification error: %s", e)
+                        log.error("Sync error: %s", e)
 
                 track_results.append(TrackResult(
                     track_id=tid,

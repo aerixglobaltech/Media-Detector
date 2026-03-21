@@ -25,15 +25,15 @@ class FaceDetector:
     Falls back to center-crop when RetinaFace is unavailable.
     """
 
-    def __init__(self, threshold: float = 0.9):
+    def __init__(self, threshold: float = 0.5):
         self.threshold = threshold
         self._available = _RETINAFACE_OK
 
     # ------------------------------------------------------------------
     def detect_in_crop(
-        self,
         frame: np.ndarray,
         person_bbox: list[float],
+        threshold: float | None = None
     ) -> list[float] | None:
         """
         Detect the largest face inside *person_bbox* on *frame*.
@@ -65,7 +65,9 @@ class FaceDetector:
             return [px1, py1, px2, py1 + ch // 3]
 
         try:
-            faces = _RF.detect_faces(crop, threshold=self.threshold)
+            # Use provided threshold or fallback to default
+            detect_thresh = threshold if threshold is not None else self.threshold
+            faces = _RF.detect_faces(crop, threshold=detect_thresh)
         except Exception:
             return None
 

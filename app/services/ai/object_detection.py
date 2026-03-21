@@ -158,8 +158,25 @@ class PersonDetector:
                     self._untracked_count += 1
                     ids.append(-(1000 + (self._untracked_count % 10000)))
             
+            img_h = frame.shape[0]
             for box, tid, conf in zip(result.boxes.xyxy, ids, result.boxes.conf):
                 x1, y1, x2, y2 = box.tolist()
+                bw, bh = x2 - x1, y2 - y1
+                
+                # REJECTION FILTERS TO BLOCK CEILING FANS / ARTIFACTS:
+                # 1. Ceiling Zone: Ignore small objects in the top 15% of the frame (Fans)
+                if y2 < (img_h * 0.15) and bh < (img_h * 0.20):
+                    continue
+                
+                # 2. Min Height: Ignore tiny artifacts (< 30px)
+                if bh < 30:
+                    continue
+                    
+                # 3. Aspect Ratio: Relaxed to 2.5 for wide desk posture
+                ratio = bw / bh
+                if ratio < 0.10 or ratio > 2.5:
+                    continue
+                
                 track_id = int(tid)
                 tracks.append([x1, y1, x2, y2, float(conf), track_id])
 
