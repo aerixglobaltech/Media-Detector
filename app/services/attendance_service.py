@@ -17,18 +17,18 @@ log = logging.getLogger("attendance_service")
 
 
 
-def log_movement(camera_id: str, image_path: str, detected_at: datetime | None = None, track_id: int | None = None, event_type: str | None = None) -> int | None:
-    """Store raw motion event (all classes: human/animal/unknown)."""
+def log_movement(camera_id: str, image_path: str, detected_at: datetime | None = None, track_id: int | None = None, event_type: str | None = None, staff_id: int | None = None, staff_name: str | None = None, person_type: str | None = None) -> int | None:
+    """Store movement event with optional identity info."""
     log.debug(f"log_movement called for {camera_id} with image: {image_path}")
     detected_at = detected_at or datetime.now()
     conn = get_db_connection()
     try:
         cur = conn.cursor()
         cur.execute("""
-            INSERT INTO movement_log (camera_id, image_path, detected_at, track_id, event_type)
-            VALUES (%s, %s, %s, %s, %s)
+            INSERT INTO movement_log (camera_id, image_path, detected_at, track_id, event_type, staff_id, staff_name, person_type)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
             RETURNING id
-        """, (camera_id, image_path, detected_at, track_id, event_type))
+        """, (camera_id, image_path, detected_at, track_id, event_type, staff_id, staff_name, person_type))
         row = cur.fetchone()
         conn.commit()
         ret_id = row["id"] if row else None
@@ -106,6 +106,14 @@ def log_person(
         conn.commit()
         res_id = row["id"] if row else None
         
+        # Trigger attendance update if staff (Redundant safety check)
+        if staff_id and person_type.lower() == 'staff':
+            try:
+                from app.services.attendance_service import track_staff_attendance
+                track_staff_attendance(staff_id, staff_name=staff_name, entry_image=image_path, camera_name=camera_id)
+            except Exception as e:
+                log.warning(f"Failed to auto-trigger attendance in log_person: {e}")
+
         # SSE UPDATE
         if res_id:
             sse_manager.announce({
@@ -127,11 +135,13 @@ def log_person(
         conn.close()
 
 
-def update_person_identity(member_id: int, movement_id: int, staff_id: int, staff_name: str):
-    """Update existing logs with staff info (used if recognized late)."""
+def update_person_identity(member_id: int, staff_id: int, staff_name: str, track_id: int | None = None, movement_id: int | None = None):
+    """Update existing logs with staff info (used if recognized late or corrected)."""
     conn = get_db_connection()
     try:
         cur = conn.cursor()
+        
+        # 1. Update Member Timestamp
         if member_id:
             log.info(f"DB: Updating member_timestamp #{member_id} to staff {staff_name} (ID: {staff_id})")
             cur.execute("""
@@ -140,7 +150,7 @@ def update_person_identity(member_id: int, movement_id: int, staff_id: int, staf
                 WHERE id = %s
             """, (staff_id, staff_name, member_id))
             
-            # SSE UPDATE so the UI refreshes from "Unknown" to "Staff Name"
+            # SSE UPDATE
             sse_manager.announce({
                 "id": member_id,
                 "person_type": "staff",
@@ -149,12 +159,30 @@ def update_person_identity(member_id: int, movement_id: int, staff_id: int, staf
                 "update_type": "late_recognition"
             }, event_type="member_log_update")
 
+        if track_id:
+            # Update ALL member logs for this track today (Safety)
+            cur.execute("""
+                UPDATE member_timestamp 
+                SET person_type = 'staff', staff_id = %s, staff_name = %s
+                WHERE track_id = %s AND detected_at::date = CURRENT_DATE
+            """, (staff_id, staff_name, track_id))
+
+        # 2. Update Movement Logs
         if movement_id:
             cur.execute("""
                 UPDATE movement_log 
                 SET person_type = 'staff', staff_id = %s, staff_name = %s
                 WHERE id = %s
             """, (staff_id, staff_name, movement_id))
+            
+        if track_id:
+            # Update ALL movement logs for this track today
+            cur.execute("""
+                UPDATE movement_log 
+                SET person_type = 'staff', staff_id = %s, staff_name = %s
+                WHERE track_id = %s AND detected_at::date = CURRENT_DATE
+            """, (staff_id, staff_name, track_id))
+
         conn.commit()
     except Exception as e:
         log.error(f"Failed to update person identity: {e}")
@@ -236,12 +264,12 @@ def track_staff_attendance(
                     INSERT INTO attendance
                     (
                         staff_id, staff_name, attendance_date, first_entry_time, last_exit_time,
-                        in_time, out_time, entry_image, in_image, status, movement_count, day_status, timestamp
+                        in_time, out_time, entry_image, in_image, out_image, status, movement_count, day_status, timestamp, camera_name
                     )
-                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, 'IN', 1, 'open', %s)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, 'IN', 1, 'open', %s, %s)
                 """, (
                     staff_id, staff_name, today, detected_at, detected_at,
-                    detected_at, detected_at, entry_image, entry_image, detected_at
+                    detected_at, detected_at, entry_image, entry_image, entry_image, detected_at, camera_name
                 ))
             else:
                 log.info(f"DEBUG: Updating EXISTING attendance record {record['id']}")
@@ -254,10 +282,12 @@ def track_staff_attendance(
                         timestamp = %s,
                         staff_name = COALESCE(staff_name, %s),
                         entry_image = COALESCE(entry_image, %s),
-                        in_image = COALESCE(in_image, %s)
+                        in_image = COALESCE(in_image, %s),
+                        out_image = %s,
+                        camera_name = COALESCE(camera_name, %s)
                     WHERE staff_id = %s AND attendance_date = %s
                 """, (
-                    detected_at, detected_at, detected_at, staff_name, entry_image, entry_image,
+                    detected_at, detected_at, detected_at, staff_name, entry_image, entry_image, entry_image, camera_name,
                     staff_id, today
                 ))
         except Exception as schema_exc:

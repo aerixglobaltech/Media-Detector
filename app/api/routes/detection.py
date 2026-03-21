@@ -161,8 +161,6 @@ def api_dashboard_v3():
         row = cur.fetchone()
         if row: user_count = int(row['count'] or 0)
         
-        # 3. Attendance Trend (Last 7 days)
-        # Using attendance table for daily unique entries/exits
         cur.execute("""
             SELECT 
                 attendance_date as day,
@@ -176,6 +174,26 @@ def api_dashboard_v3():
         rows = cur.fetchall()
         for r in rows:
             attendance_trend.append({
+                "day": r['day'].strftime("%m/%d") if hasattr(r['day'], 'strftime') else str(r['day']),
+                "check_in": int(r['check_in'] or 0),
+                "check_out": int(r['check_out'] or 0)
+            })
+
+        # 3b. Monthly Attendance Trend (Last 30 days)
+        attendance_monthly_trend = []
+        cur.execute("""
+            SELECT 
+                attendance_date as day,
+                COUNT(first_entry_time)::int as check_in,
+                COUNT(last_exit_time)::int as check_out
+            FROM attendance
+            WHERE attendance_date >= CURRENT_DATE - INTERVAL '30 days'
+            GROUP BY attendance_date
+            ORDER BY attendance_date ASC
+        """)
+        rows = cur.fetchall()
+        for r in rows:
+            attendance_monthly_trend.append({
                 "day": r['day'].strftime("%m/%d") if hasattr(r['day'], 'strftime') else str(r['day']),
                 "check_in": int(r['check_in'] or 0),
                 "check_out": int(r['check_out'] or 0)
@@ -232,6 +250,7 @@ def api_dashboard_v3():
         "ai_status": ai_status,
         "media_status": media_status,
         "attendance_trend": attendance_trend,
+        "attendance_monthly_trend": attendance_monthly_trend,
         "daily_presence": daily_presence
     })
 
@@ -1080,9 +1099,14 @@ def api_attendance_records():
             tuple(params),
         )
         summary = cur.fetchone() or {}
-
+        
         formatted_records = []
         for r in rows:
+            # Robust image path formatting
+            in_img = r.get("in_image") or ""
+            out_img = r.get("out_image") or ""
+            # Do NOT add prefix here, let frontend handle it consistently
+
             formatted_records.append({
                 "id": r["id"],
                 "staff_id": r["db_id"],
@@ -1093,9 +1117,9 @@ def api_attendance_records():
                 "status": r["status"],
                 "in_time": r["in_time"].strftime("%Y-%m-%d %H:%M:%S") if r["in_time"] else "-",
                 "out_time": r["out_time"].strftime("%Y-%m-%d %H:%M:%S") if r["out_time"] else "-",
-                "camera_name": r.get("camera_name", "-"),
-                "in_image": r.get("in_image"),
-                "out_image": r.get("out_image"),
+                "camera_name": r.get("camera_name") or "Webcam",
+                "in_image": in_img,
+                "out_image": out_img,
                 "timestamp": r["timestamp"].strftime("%Y-%m-%d") if hasattr(r["timestamp"], "strftime") else str(r["timestamp"])
             })
 

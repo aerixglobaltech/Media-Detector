@@ -2,7 +2,7 @@
 {% set active_page = 'dashboard' %}
 
 {% block content %}
-<div id="view-dashboard" class="dashboard-container" style="padding: 20px 24px; background: var(--bg); height: 100%; overflow-y: auto; overflow-x: hidden; display: flex; flex-direction: column; gap: 16px;">
+<div id="view-dashboard" class="dashboard-container" style="padding: 20px 24px; background: var(--bg); min-height: 100%; display: flex; flex-direction: column; gap: 16px;">
     
     <!-- Top Header Profile Section -->
     <div class="dashboard-welcome-row" style="display: flex; justify-content: space-between; align-items: flex-end; margin-bottom: 8px;">
@@ -80,22 +80,28 @@
     <div style="flex: 1; display: grid; grid-template-columns: 1fr 360px; gap: 16px; min-height: 0;">
         
         <!-- Activity Panel -->
-        <div class="settings-card" style="padding: 24px; display: flex; flex-direction: column; min-height: 0; min-width: 0; overflow: hidden;">
+        <div class="settings-card" style="padding: 24px; display: flex; flex-direction: column; gap: 16px;">
 
 
-            <!-- Detection Events Line Graph (7-Day) -->
-            <div id="attendance-chart-wrapper" style="flex: 1; display: flex; flex-direction: column; padding: 16px; background: var(--surface2); border-radius: 12px; border: 1px solid var(--border); box-shadow: 0 4px 12px rgba(0,0,0,0.1);">
-                <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 12px;">
+            <!-- Detection Events Line Graph -->
+            <div id="attendance-chart-wrapper" style="padding: 16px; background: var(--surface2); border-radius: 12px; border: 1px solid var(--border); box-shadow: 0 4px 12px rgba(0,0,0,0.1);">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; flex-wrap: wrap; gap: 12px;">
                     <div>
-                        <span style="font-size: 13px; font-weight: 800; color: var(--text); letter-spacing: 0.5px; text-transform: uppercase;">7-Day Detection Trend</span>
-                        <p style="font-size: 11px; color: var(--muted); margin: 2px 0 0 0;">Check-in and check-out events over the last 7 days</p>
+                        <span id="chart-title" style="font-size: 13px; font-weight: 800; color: var(--text); letter-spacing: 0.5px; text-transform: uppercase;">7-Day Detection Trend</span>
+                        <p id="chart-subtitle" style="font-size: 11px; color: var(--muted); margin: 2px 0 0 0;">Check-in and check-out events over the last 7 days</p>
                     </div>
-                    <div style="display: flex; gap: 12px; align-items: center; padding-top: 2px;">
+                    
+                    <div style="display: flex; gap: 4px; background: var(--surface); padding: 3px; border-radius: 8px; border: 1px solid var(--border);">
+                        <button onclick="renderAttendanceChart('7d')" id="btn-7d" style="padding: 4px 12px; font-size: 12px; font-weight: 700; border-radius: 6px; border: none; cursor: pointer; background: var(--accent); color: white;">7 Days</button>
+                        <button onclick="renderAttendanceChart('30d')" id="btn-30d" style="padding: 4px 12px; font-size: 12px; font-weight: 700; border-radius: 6px; border: none; cursor: pointer; background: transparent; color: var(--muted);">30 Days</button>
+                    </div>
+
+                    <div style="display: flex; gap: 12px; align-items: center;">
                         <span style="font-size: 11px; color: #30bf80; display: flex; align-items: center; gap: 4px;"><span style="width:8px;height:8px;border-radius:50%;background:#30bf80;display:inline-block;"></span> Check-In</span>
                         <span style="font-size: 11px; color: #e05252; display: flex; align-items: center; gap: 4px;"><span style="width:8px;height:8px;border-radius:50%;background:#e05252;display:inline-block;"></span> Check-Out</span>
                     </div>
                 </div>
-                <div style="flex: 1; min-height: 300px; position: relative;">
+                <div style="height: 320px; position: relative;">
                     <canvas id="attendanceChart"></canvas>
                 </div>
             </div>
@@ -198,80 +204,11 @@ async function loadDashboard() {
         document.getElementById('dash-users-progress').style.width = userPct + '%';
 
 
-        // Render Detection Events Line Graph
-        if (data.attendance_trend && data.attendance_trend.length > 0) {
-            const labels = data.attendance_trend.map(t => t.day);
-            const checkInData = data.attendance_trend.map(t => t.check_in);
-            const checkOutData = data.attendance_trend.map(t => t.check_out);
-            
-            if (attendanceChartInstance) { attendanceChartInstance.destroy(); }
-            
-            const ctx = document.getElementById('attendanceChart').getContext('2d');
-
-            // Gradient fills - not used for bar chart, but keeping for context if needed
-            const gradIn = ctx.createLinearGradient(0, 0, 0, 130);
-            gradIn.addColorStop(0, 'rgba(48, 191, 128, 0.35)');
-            gradIn.addColorStop(1, 'rgba(48, 191, 128, 0.0)');
-
-            const gradOut = ctx.createLinearGradient(0, 0, 0, 130);
-            gradOut.addColorStop(0, 'rgba(224, 82, 82, 0.30)');
-            gradOut.addColorStop(1, 'rgba(224, 82, 82, 0.0)');
-
-            attendanceChartInstance = new Chart(ctx, {
-                type: 'bar',
-                data: {
-                    labels: labels,
-                    datasets: [
-                        {
-                            label: 'Check-In',
-                            data: checkInData,
-                            backgroundColor: 'rgba(48, 191, 128, 0.8)',
-                            borderColor: '#30bf80',
-                            borderWidth: 1,
-                            borderRadius: 6,
-                        },
-                        {
-                            label: 'Check-Out',
-                            data: checkOutData,
-                            backgroundColor: 'rgba(224, 82, 82, 0.8)',
-                            borderColor: '#e05252',
-                            borderWidth: 1,
-                            borderRadius: 6,
-                        }
-                    ]
-                },
-                options: {
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    interaction: { mode: 'index', intersect: false },
-                    plugins: {
-                        legend: { display: false },
-                        tooltip: {
-                            backgroundColor: 'rgba(15,20,35,0.95)',
-                            padding: 12,
-                            cornerRadius: 8,
-                            titleFont: { size: 13, weight: 'bold' },
-                            callbacks: {
-                                label: ctx => ` ${ctx.dataset.label}: ${ctx.parsed.y}`
-                            }
-                        }
-                    },
-                    scales: {
-                        x: {
-                            grid: { display: false },
-                            ticks: { color: '#777', font: { size: 11 } },
-                            border: { display: false }
-                        },
-                        y: {
-                            beginAtZero: true,
-                            grid: { color: 'rgba(255,255,255,0.04)', drawBorder: false },
-                            ticks: { color: '#777', font: { size: 11 }, stepSize: 1 },
-                            border: { display: false }
-                        }
-                    }
-                }
-            });
-        }
+        // Cache trend data for switching
+        window.trend7d = data.attendance_trend || [];
+        window.trend30d = data.attendance_monthly_trend || [];
+        
+        renderAttendanceChart('7d');
 
         // Live Presence Rendering
         const presenceList = document.getElementById('presence-list');
@@ -331,6 +268,98 @@ async function loadDashboard() {
     }
 }
 
+function renderAttendanceChart(range) {
+    const data = (range === '30d') ? window.trend30d : window.trend7d;
+    if (!data || data.length === 0) return;
+
+    const labels = data.map(t => t.day);
+    const checkInData = data.map(t => t.check_in);
+    const checkOutData = data.map(t => t.check_out);
+
+    // Update UI Buttons
+    const btn7d = document.getElementById('btn-7d');
+    const btn30d = document.getElementById('btn-30d');
+    if (range === '30d') {
+        btn30d.style.background = 'var(--accent)';
+        btn30d.style.color = 'white';
+        btn7d.style.background = 'transparent';
+        btn7d.style.color = 'var(--muted)';
+        document.getElementById('chart-title').innerText = '30-Day Detection Trend';
+        document.getElementById('chart-subtitle').innerText = 'Check-in and check-out events over the last 30 days';
+    } else {
+        btn7d.style.background = 'var(--accent)';
+        btn7d.style.color = 'white';
+        btn30d.style.background = 'transparent';
+        btn30d.style.color = 'var(--muted)';
+        document.getElementById('chart-title').innerText = '7-Day Detection Trend';
+        document.getElementById('chart-subtitle').innerText = 'Check-in and check-out events over the last 7 days';
+    }
+
+    if (attendanceChartInstance) { attendanceChartInstance.destroy(); }
+    const ctx = document.getElementById('attendanceChart').getContext('2d');
+    
+    attendanceChartInstance = new Chart(ctx, {
+        type: 'bar',
+        data: {
+            labels: labels,
+            datasets: [
+                {
+                    label: 'Check-In',
+                    data: checkInData,
+                    backgroundColor: 'rgba(48, 191, 128, 0.8)',
+                    borderColor: '#30bf80',
+                    borderWidth: 1,
+                    borderRadius: range === '30d' ? 2 : 6,
+                },
+                {
+                    label: 'Check-Out',
+                    data: checkOutData,
+                    backgroundColor: 'rgba(224, 82, 82, 0.8)',
+                    borderColor: '#e05252',
+                    borderWidth: 1,
+                    borderRadius: range === '30d' ? 2 : 6,
+                }
+            ]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            interaction: { mode: 'index', intersect: false },
+            plugins: {
+                legend: { display: false },
+                tooltip: {
+                    backgroundColor: 'rgba(15,20,35,0.95)',
+                    padding: 12,
+                    cornerRadius: 8,
+                    titleFont: { size: 13, weight: 'bold' },
+                    callbacks: {
+                        label: ctx => ` ${ctx.dataset.label}: ${ctx.parsed.y}`
+                    }
+                }
+            },
+            scales: {
+                x: {
+                    grid: { display: false },
+                    ticks: { 
+                        color: '#777', 
+                        font: { size: 10 },
+                        autoSkip: true,
+                        maxRotation: 0,
+                        minRotation: 0
+                    },
+                    border: { display: false }
+                },
+                y: {
+                    beginAtZero: true,
+                    grid: { color: 'rgba(255,255,255,0.04)', drawBorder: false },
+                    ticks: { color: '#777', font: { size: 11 }, stepSize: 1 },
+                    border: { display: false }
+                }
+            }
+        }
+    });
+}
+
 function updateGreeting() {
     const hour = new Date().getHours();
     const greet = document.getElementById('greeting-text');
@@ -349,7 +378,6 @@ document.addEventListener('DOMContentLoaded', () => {
 </script>
 
 <style>
-.dashboard-container { height: calc(100vh - 53px); box-sizing: border-box; overflow-y: auto !important; }
-#view-dashboard { overflow-y: auto !important; }
+.dashboard-container { min-height: calc(100vh - 53px); box-sizing: border-box; padding-bottom: 40px !important; }
 </style>
 {% endblock %}

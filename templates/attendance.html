@@ -136,6 +136,12 @@
     <div class="modal-body" id="modal-body-content">
       <!-- Content populated by JS -->
     </div>
+    <div id="modal-footer-timeline" style="padding: 0 24px 24px 24px; border-top: 1px solid var(--border); display: none;">
+       <h4 style="margin: 20px 0 12px 0; font-size: 14px;">Activity Timeline</h4>
+       <div id="att-timeline-container" style="display: flex; gap: 12px; overflow-x: auto; padding-bottom: 10px;">
+          <!-- Timeline items -->
+       </div>
+    </div>
   </div>
 </div>
 
@@ -803,9 +809,11 @@
     return hrs > 0 ? `${hrs}h ${remMins}m` : `${remMins}m`;
   }
 
-  function openAttDetails(r) {
+  async function openAttDetails(r) {
     const modal = document.getElementById('att-details-modal');
     const content = document.getElementById('modal-body-content');
+    const timelineSection = document.getElementById('modal-footer-timeline');
+    const timelineContainer = document.getElementById('att-timeline-container');
 
     content.innerHTML = `
       <div class="details-grid">
@@ -824,6 +832,7 @@
             <div><div class="details-label">Current Status</div><span class="badge-status ${r.status === 'IN' ? 'badge-in' : 'badge-out'}">${r.status || '-'}</span></div>
           </div>
           <div class="details-label">Email</div><div class="details-value">${r.email || '-'}</div>
+          <div class="details-label">First Seen Camera</div><div class="details-value">${r.camera_name || '-'}</div>
         </div>
         <div style="display:flex; flex-direction:column; gap:20px;">
           <div>
@@ -842,6 +851,34 @@
       </div>
     `;
     modal.classList.add('active');
+
+    // Fetch Timeline
+    if (r.staff_id) {
+        timelineSection.style.display = 'block';
+        timelineContainer.innerHTML = '<div style="font-size:12px; color:var(--muted);">Loading timeline...</div>';
+        try {
+            const date = r.timestamp || new Date().toISOString().split('T')[0];
+            const res = await fetch(`/api/member-logs?staff_id=${r.staff_id}&date_from=${date}&date_to=${date}&limit=50`);
+            const data = await res.json();
+            if (data.status === 'success' && data.data.length) {
+                timelineContainer.innerHTML = data.data.reverse().map(log => `
+                    <div style="flex: 0 0 120px; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; background: var(--surface2);">
+                        <img src="${log.entry_image}" style="width: 100%; aspect-ratio: 4/3; object-fit: cover;">
+                        <div style="padding: 6px; font-size: 10px; text-align: center; border-top: 1px solid var(--border);">
+                            <div style="font-weight: 700;">${fmtTime(log.entry_time)}</div>
+                            <div style="color: var(--muted); font-size: 9px;">${log.camera_id || ''}</div>
+                        </div>
+                    </div>
+                `).join('');
+            } else {
+                timelineContainer.innerHTML = '<div style="font-size:12px; color:var(--muted);">No additional movements found.</div>';
+            }
+        } catch (e) {
+            timelineContainer.innerHTML = '<div style="font-size:12px; color:var(--red);">Error loading timeline.</div>';
+        }
+    } else {
+        timelineSection.style.display = 'none';
+    }
   }
 
   function closeAttDetails() {
@@ -887,11 +924,11 @@
         <td class="att-td"><strong>${r.name || '-'}</strong><div style="font-size:11px; color:var(--muted);">${r.email || ''}</div></td>
         <td class="att-td">${fmtDateTime(r.in_time)}</td>
         <td class="att-td">
-          ${r.in_image ? `<img src="/${r.in_image}" style="height:32px; width:45px; object-fit:cover; border-radius:4px; border:1px solid var(--border);" onerror="this.style.display='none'">` : '-'}
+          ${r.in_image ? `<img src="${r.in_image.startsWith('/') ? r.in_image : '/' + r.in_image}" style="height:32px; width:45px; object-fit:cover; border-radius:4px; border:1px solid var(--border);" onerror="this.style.display='none'">` : '-'}
         </td>
         <td class="att-td">${fmtDateTime(r.out_time)}</td>
         <td class="att-td">
-          ${r.out_image ? `<img src="/${r.out_image}" style="height:32px; width:45px; object-fit:cover; border-radius:4px; border:1px solid var(--border);" onerror="this.style.display='none'">` : '-'}
+          ${r.out_image ? `<img src="${r.out_image.startsWith('/') ? r.out_image : '/' + r.out_image}" style="height:32px; width:45px; object-fit:cover; border-radius:4px; border:1px solid var(--border);" onerror="this.style.display='none'">` : '-'}
         </td>
         <td class="att-td"><span class="badge-status ${statusClass}">${statusText}</span></td>
         <td class="att-td" style="white-space:nowrap;">${r.timestamp || '-'}</td>

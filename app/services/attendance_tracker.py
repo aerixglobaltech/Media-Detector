@@ -248,10 +248,11 @@ class AttendanceTracker:
                          movement_count, day_status)
                     VALUES (%s, 'IN', %s, %s, %s, %s, 1, 'open')
                     ON CONFLICT (staff_id, attendance_date) DO UPDATE
-                        SET status         = 'IN',
-                            in_time        = EXCLUDED.in_time,
-                            movement_count = attendance.movement_count + 1,
-                            day_status     = 'open'
+                        SET status             = 'IN',
+                            in_time            = EXCLUDED.in_time,
+                            first_entry_time   = COALESCE(attendance.first_entry_time, EXCLUDED.first_entry_time),
+                            movement_count     = attendance.movement_count + 1,
+                            day_status         = 'open'
                     """,
                     (staff_id, wall_time, wall_time, today, wall_time),
                 )

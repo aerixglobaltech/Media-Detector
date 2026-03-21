@@ -424,16 +424,48 @@ class AIPipeline(threading.Thread):
                         td["staff_db_id"] = cached.get("id")
                         td["display_id"] = f"{new_id} (#{tid})"
                         
-                        # Late Update: If already logged as Unknown, fix it now
-                        if td["logged"] and not td.get("id_synced"):
+                        # Late Update: If already logged as Unknown (or wrong ID), fix it now across all logs
+                        if td["logged"] and td.get("last_synced_id") != new_id:
                             from app.services.attendance_service import update_person_identity
-                            log.info(f"AI: [LATE ID UPDATE] Synchronizing Track {tid} -> {new_id}")
-                            update_person_identity(member_id=td["db_id"], movement_id=None, staff_id=td["staff_db_id"], staff_name=new_id)
-                            td["id_synced"] = True
+                            log.info(f"AI: [IDENTITY SYNC] Synchronizing Track {tid} -> {new_id} in all logs")
+                            update_person_identity(
+                                member_id=td.get("db_id"), 
+                                staff_id=td["staff_db_id"], 
+                                staff_name=new_id,
+                                track_id=tid
+                            )
+                            td["last_synced_id"] = new_id
 
                 # A. Frame Collection...
                 
                 # A. Frame Collection (collect up to 50 for better selection and 30-frame log delay)
+                td["track_frame_count"] = td.get("track_frame_count", 0) + 1
+                
+                # NEW: High-frequency movement logging (Every 5 frames)
+                if td["track_frame_count"] % 5 == 0:
+                    mv_ts = datetime.now().strftime("%Y%m%d_%H%M%S_%f")[:20]
+                    mv_filename = f"move_{tid}_{mv_ts}.jpg"
+                    mv_path = os.path.join("static", "uploads", "movement", mv_filename)
+                    cv2.imwrite(mv_path, ai_frame)
+                    
+                    # Log movement (using global imports)
+                    identity_name = td.get("identity", "Unknown")
+                    s_id = td.get("staff_db_id")
+                    p_type = "staff" if identity_name != "Unknown" else "unknown"
+                    
+                    mv_id = log_movement(
+                        camera_id=self.camera_name,
+                        image_path=f"static/uploads/movement/{mv_filename}",
+                        track_id=tid,
+                        event_type='MOVE_TRACK',
+                        staff_id=s_id,
+                        staff_name=identity_name if identity_name != "Unknown" else None,
+                        person_type=p_type
+                    )
+                    if mv_id:
+                        # Auto-classify as human since it's from a person track
+                        update_movement_classification(mv_id, 'human', 1.0)
+
                 if len(td["frames"]) < 50:
                     clarity = self._calculate_clarity(ai_frame, bbox)
                     bx1, by1, bx2, by2 = (max(0, int(v)) for v in bbox)
@@ -492,14 +524,26 @@ class AIPipeline(threading.Thread):
                         # Save FULL FRAME evidence (Context)
                         full_filename = f"entry_full_{tid}_{ts}.jpg"
                         full_path = os.path.join("static", "uploads", "movement", full_filename)
-                        if td["best_full"] is not None:
-                            cv2.imwrite(full_path, td["best_full"])
+                        
+                        # FALLBACK: If best_full is not yet captured (likely due to frame 5 trigger), use current frame
+                        snap_to_save = td.get("best_full")
+                        if snap_to_save is None:
+                            snap_to_save = ai_frame.copy()
+                            cv2.rectangle(snap_to_save, (int(bbox[0]), int(bbox[1])), (int(bbox[2]), int(bbox[3])), (0, 255, 0), 2)
+                        
+                        cv2.imwrite(full_path, snap_to_save)
                         
                         # Save FACE CROP (Forensics)
                         crop_filename = f"entry_crop_{tid}_{ts}.jpg"
                         crop_path = os.path.join("static", "uploads", "movement", crop_filename)
-                        if td["best_frame"] is not None:
-                            cv2.imwrite(crop_path, td["best_frame"])
+                        
+                        crop_to_save = td.get("best_frame")
+                        if crop_to_save is None:
+                            bx1, by1, bx2, by2 = (max(0, int(v)) for v in bbox)
+                            crop_to_save = ai_frame[by1:by2, bx1:bx2]
+                            
+                        if crop_to_save.size > 0:
+                            cv2.imwrite(crop_path, crop_to_save)
 
                         from app.services.attendance_service import log_person, get_recent_sighting
                         
@@ -579,6 +623,11 @@ class AIPipeline(threading.Thread):
                 
                 # A. Identity & Display
                 identity = td.get("identity", "Unknown")
+                
+                # Update Attendance Tracker (Heartbeat)
+                if identity != "Unknown":
+                    self.attendance_tracker.heartbeat(identity, self.camera_name)
+                    
                 clarity = td.get("best_clarity", 0)
                 if identity == "Unknown":
                     if not td["recognized"]:

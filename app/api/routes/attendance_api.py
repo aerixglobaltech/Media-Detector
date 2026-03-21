@@ -225,10 +225,19 @@ def get_staff_count(date_str):
         conn.close()
 
 @attendance_bp.route('/member-logs', methods=['GET'])
-@attendance_bp.route('/general-movement', methods=['GET'])
 @login_required
 def get_member_logs():
-    """Get member logs (staff + unknown) with pagination and filtering."""
+    """Get member logs (staff + unknown) with pagination and filtering from member_timestamp."""
+    return _fetch_logs_from_table(table_name='member_timestamp')
+
+@attendance_bp.route('/general-movement', methods=['GET'])
+@login_required
+def get_general_movement_logs():
+    """Get all movement logs (including MOVE_TRACK) with pagination and filtering from movement_log."""
+    return _fetch_logs_from_table(table_name='movement_log')
+
+def _fetch_logs_from_table(table_name: str):
+    """Helper to fetch logs with pagination and filtering."""
     person_type = request.args.get('type') # staff, unknown
     page = int(request.args.get('page', 1))
     limit = int(request.args.get('limit', request.args.get('page_size', 20)))
@@ -236,20 +245,22 @@ def get_member_logs():
     date_to = request.args.get('date_to')
     period = request.args.get('period', 'all') # all, today
     offset = (page - 1) * limit
-    
-    # Simple search for staff name or display_id
     q = request.args.get('q')
 
     conn = get_db_connection()
     try:
         cur = conn.cursor()
-        
         where_clauses = []
         params: list[Any] = []
         
         if person_type:
             where_clauses.append("m.person_type = %s")
             params.append(person_type)
+        
+        staff_id_filter = request.args.get('staff_id')
+        if staff_id_filter:
+            where_clauses.append("m.staff_id = %s")
+            params.append(staff_id_filter)
         
         if period == 'today':
             where_clauses.append("m.detected_at::date = %s")
@@ -263,7 +274,6 @@ def get_member_logs():
                 params.append(date_to)
                 
         if q:
-            # Handle NULL staff_name by checking both m.staff_name and s.name
             where_clauses.append("(COALESCE(s.name, '') ILIKE %s OR COALESCE(s.staff_id, '') ILIKE %s OR COALESCE(m.staff_name, '') ILIKE %s)")
             params.extend([f"%{q}%", f"%{q}%", f"%{q}%"])
             
@@ -271,18 +281,14 @@ def get_member_logs():
         if where_clauses:
             where_sql = "WHERE " + " AND ".join(where_clauses)
             
-        # Get counts for summary cards
-        cur.execute(f"SELECT COUNT(*) as count FROM member_timestamp m LEFT JOIN staff_profiles s ON m.staff_id = s.id {where_sql}", tuple(params))
+        # Get total count
+        cur.execute(f"SELECT COUNT(*) as count FROM {table_name} m LEFT JOIN staff_profiles s ON m.staff_id = s.id {where_sql}", tuple(params))
         total = cur.fetchone()['count']
         
-        # Get specific counts (respecting other filters EXCEPT type)
-        base_where = " AND ".join([c for c in where_clauses if "person_type" not in c])
-        base_sql = f"WHERE {base_where}" if base_where else ""
-        base_params = [p for i, p in enumerate(params) if "person_type" not in where_clauses[i//3 if q and i < len(params)-2 else 0]] 
-        # Actually easier to just re-run simple counts for summary
-        cur.execute("SELECT COUNT(*) FROM member_timestamp WHERE person_type ILIKE 'staff' AND (detected_at::date = CURRENT_DATE OR %s = 'all')", (period,))
+        # Get specific counts for summary
+        cur.execute(f"SELECT COUNT(*) FROM {table_name} WHERE person_type ILIKE 'staff' AND (detected_at::date = CURRENT_DATE OR %s = 'all')", (period,))
         staff_count = cur.fetchone()['count']
-        cur.execute("SELECT COUNT(*) FROM member_timestamp WHERE person_type ILIKE 'unknown' AND (detected_at::date = CURRENT_DATE OR %s = 'all')", (period,))
+        cur.execute(f"SELECT COUNT(*) FROM {table_name} WHERE person_type ILIKE 'unknown' AND (detected_at::date = CURRENT_DATE OR %s = 'all')", (period,))
         unknown_count = cur.fetchone()['count']
         
         # Get data
@@ -290,18 +296,18 @@ def get_member_logs():
             SELECT 
                 m.id, 
                 m.camera_id,
-                m.entry_image,
+                COALESCE(m.entry_image, m.image_path) as entry_image,
                 m.image_path, 
                 m.exit_image,
                 m.merged_image,
                 m.person_type, 
                 m.staff_id, 
-                s.name AS member_name, 
-                m.entry_time,
+                COALESCE(s.name, m.staff_name) AS member_name, 
+                COALESCE(m.entry_time, m.detected_at) as entry_time,
                 m.detected_at,
                 m.exit_time,
                 s.staff_id as display_id
-            FROM member_timestamp m
+            FROM {table_name} m
             LEFT JOIN staff_profiles s ON m.staff_id = s.id
             {where_sql}
             ORDER BY m.detected_at DESC
@@ -310,23 +316,20 @@ def get_member_logs():
         
         rows = cur.fetchall()
         
-        # Format for JSON
         results = []
         for r in rows:
-            p_type = r['person_type'] or "unknown"
-            image_path = r['image_path'] if r['image_path'] else ""
             results.append({
                 "id": r['id'],
-                "person_type": p_type.upper(),
+                "person_type": (r['person_type'] or "unknown").upper(),
                 "member_id": r['staff_id'],
                 "member_name": r['member_name'] or "-",
                 "display_id": r['display_id'] or "-",
                 "camera_id": r['camera_id'],
-                "entry_image": _member_log_image_url(r['entry_image'] or r['image_path']),
-                "image_url": _member_log_image_url(r['entry_image'] or r['image_path']),
+                "entry_image": _member_log_image_url(r['entry_image']),
+                "image_url": _member_log_image_url(r['entry_image']),
                 "exit_image": _member_log_image_url(r['exit_image']),
                 "merged_image": _member_log_image_url(r['merged_image']),
-                "entry_time": (r['entry_time'] or r['detected_at']).strftime("%Y-%m-%d %H:%M:%S") if r['entry_time'] or r['detected_at'] else "-",
+                "entry_time": r['entry_time'].strftime("%Y-%m-%d %H:%M:%S") if r['entry_time'] else "-",
                 "exit_time": r['exit_time'].strftime("%Y-%m-%d %H:%M:%S") if r['exit_time'] else "-"
             })
             
@@ -338,28 +341,33 @@ def get_member_logs():
                 "staff": staff_count,
                 "unknown": unknown_count
             },
-            "period": period,
             "pagination": {
                 "total": total,
-                "staff_count": staff_count,
-                "unknown_count": unknown_count,
                 "page": page,
                 "limit": limit,
                 "pages": (int(total) + limit - 1) // limit if limit > 0 else 0
             }
         })
     except Exception as e:
-        log.error(f"Error fetching member logs: {e}")
+        log.error(f"Error fetching logs from {table_name}: {e}")
         return jsonify({"status": "error", "message": str(e)}), 500
     finally:
         conn.close()
 
 @attendance_bp.route("/member-logs/export", methods=['GET'])
-@attendance_bp.route("/general-movement/export", methods=['GET'])
 @login_required
 def export_member_logs():
-    """Export member logs as CSV."""
-    
+    """Export member logs from member_timestamp as CSV."""
+    return _export_logs_from_table(table_name='member_timestamp', filename_prefix='member_logs')
+
+@attendance_bp.route("/general-movement/export", methods=['GET'])
+@login_required
+def export_general_movement_logs():
+    """Export general movement logs from movement_log as CSV."""
+    return _export_logs_from_table(table_name='movement_log', filename_prefix='general_movement')
+
+def _export_logs_from_table(table_name: str, filename_prefix: str):
+    """Helper to export logs from a specific table as CSV."""
     person_type = request.args.get("type")
     date_from = request.args.get("date_from")
     date_to = request.args.get("date_to")
@@ -367,7 +375,6 @@ def export_member_logs():
     conn = get_db_connection()
     try:
         cur = conn.cursor()
-        
         where_clauses = []
         params: list[Any] = []
         
@@ -390,10 +397,10 @@ def export_member_logs():
                 m.detected_at,
                 m.person_type, 
                 s.staff_id as display_id,
-                s.name AS staff_name,
+                COALESCE(s.name, m.staff_name) AS staff_name,
                 m.camera_id,
                 m.confidence_score
-            FROM member_timestamp m
+            FROM {table_name} m
             LEFT JOIN staff_profiles s ON m.staff_id = s.id
             {where_sql}
             ORDER BY m.detected_at DESC
@@ -401,7 +408,6 @@ def export_member_logs():
         
         rows = cur.fetchall()
         
-        # Generate CSV
         output = io.StringIO()
         writer = csv.writer(output)
         writer.writerow(['Detection Time', 'Person Type', 'Staff ID', 'Staff Name', 'Camera', 'Confidence Score'])
@@ -420,11 +426,10 @@ def export_member_logs():
         return Response(
             output.getvalue(),
             mimetype="text/csv",
-            headers={"Content-disposition": f"attachment; filename=member_logs_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"}
+            headers={"Content-disposition": f"attachment; filename={filename_prefix}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"}
         )
-            
     except Exception as e:
-        log.error(f"Error exporting member logs: {e}")
+        log.error(f"Error exporting {table_name}: {e}")
         return jsonify({"status": "error", "message": str(e)}), 500
     finally:
         conn.close()
