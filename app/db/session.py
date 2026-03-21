@@ -299,7 +299,9 @@ def init_db() -> None:
             ("staff_name", "VARCHAR(100)"),
             ("confidence_score", "FLOAT"),
             ("track_id", "INTEGER"),
-            ("event_type", "VARCHAR(50)")
+            ("event_type", "VARCHAR(50)"),
+            ('exit_camera_id', 'VARCHAR(100)'),
+            ('exit_camera_name', 'VARCHAR(100)')
         ]
         for col, dtype in m_cols:
             try:
@@ -350,7 +352,9 @@ def init_db() -> None:
             ("staff_name", "VARCHAR(100)"),
             ("confidence_score", "FLOAT"),
             ("track_id", "INTEGER"),
-            ("event_type", "VARCHAR(50)")
+            ("event_type", "VARCHAR(50)"),
+            ('exit_camera_id', 'VARCHAR(100)'),
+            ('exit_camera_name', 'VARCHAR(100)')
         ]
         for col, dtype in cols:
             try:

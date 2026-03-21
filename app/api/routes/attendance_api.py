@@ -306,6 +306,8 @@ def _fetch_logs_from_table(table_name: str):
                 COALESCE(m.entry_time, m.detected_at) as entry_time,
                 m.detected_at,
                 m.exit_time,
+                m.camera_name as entry_camera_name,
+                m.exit_camera_name,
                 s.staff_id as display_id
             FROM {table_name} m
             LEFT JOIN staff_profiles s ON m.staff_id = s.id
@@ -325,12 +327,14 @@ def _fetch_logs_from_table(table_name: str):
                 "member_name": r['member_name'] or "-",
                 "display_id": r['display_id'] or "-",
                 "camera_id": r['camera_id'],
-                "entry_image": _member_log_image_url(r['entry_image']),
-                "image_url": _member_log_image_url(r['entry_image']),
+                "entry_camera_name": r['entry_camera_name'] or r['camera_id'] or "-",
+                "entry_image": _member_log_image_url(r['image_path']),
+                "image_url": _member_log_image_url(r['image_path']),
                 "exit_image": _member_log_image_url(r['exit_image']),
                 "merged_image": _member_log_image_url(r['merged_image']),
                 "entry_time": r['entry_time'].strftime("%Y-%m-%d %H:%M:%S") if r['entry_time'] else "-",
-                "exit_time": r['exit_time'].strftime("%Y-%m-%d %H:%M:%S") if r['exit_time'] else "-"
+                "exit_time": r['exit_time'].strftime("%Y-%m-%d %H:%M:%S") if r['exit_time'] else "-",
+                "exit_camera_name": r.get('exit_camera_name') or "-"
             })
             
         return jsonify({

@@ -25,10 +25,10 @@ def log_movement(camera_id: str, image_path: str, detected_at: datetime | None =
     try:
         cur = conn.cursor()
         cur.execute("""
-            INSERT INTO movement_log (camera_id, image_path, detected_at, track_id, event_type, staff_id, staff_name, person_type)
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+            INSERT INTO movement_log (camera_id, camera_name, image_path, detected_at, track_id, event_type, staff_id, staff_name, person_type)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
             RETURNING id
-        """, (camera_id, image_path, detected_at, track_id, event_type, staff_id, staff_name, person_type))
+        """, (camera_id, camera_id, image_path, detected_at, track_id, event_type, staff_id, staff_name, person_type))
         row = cur.fetchone()
         conn.commit()
         ret_id = row["id"] if row else None
@@ -98,10 +98,10 @@ def log_person(
         cur = conn.cursor()
         cur.execute("""
             INSERT INTO member_timestamp 
-            (camera_id, person_type, staff_id, staff_name, image_path, confidence_score, detected_at, track_id, event_type)
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+            (camera_id, camera_name, person_type, staff_id, staff_name, image_path, confidence_score, detected_at, track_id, event_type)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
             RETURNING id
-        """, (camera_id, person_type, staff_id, staff_name, image_path, confidence, detected_at, track_id, event_type))
+        """, (camera_id, camera_id, person_type, staff_id, staff_name, image_path, confidence, detected_at, track_id, event_type))
         row = cur.fetchone()
         conn.commit()
         res_id = row["id"] if row else None
@@ -211,23 +211,25 @@ def get_recent_sighting(staff_id: int, camera_id: str, minutes: int = 5) -> int 
         conn.close()
 
 
-def update_exit_logs(member_id: int, movement_id: int, exit_image: str, merged_image: str, track_id: int | None = None):
-    """Update both tables with exit and merged images."""
+def update_exit_logs(member_id: int, movement_id: int, exit_image: str, merged_image: str, track_id: int | None = None, exit_camera_id: str | None = None, exit_camera_name: str | None = None):
+    """Update both tables with exit and merged images, and recording the exit camera."""
     conn = get_db_connection()
     try:
         cur = conn.cursor()
         if member_id:
             cur.execute("""
                 UPDATE member_timestamp 
-                SET exit_image = %s, merged_image = %s, exit_time = NOW(), event_type = 'EXIT'
+                SET exit_image = %s, merged_image = %s, exit_time = NOW(), event_type = 'EXIT',
+                    exit_camera_id = %s, exit_camera_name = %s
                 WHERE id = %s
-            """, (exit_image, merged_image, member_id))
+            """, (exit_image, merged_image, exit_camera_id, exit_camera_name, member_id))
         if movement_id:
             cur.execute("""
                 UPDATE movement_log 
-                SET exit_image = %s, merged_image = %s, exit_time = NOW(), event_type = 'EXIT'
+                SET exit_image = %s, merged_image = %s, exit_time = NOW(), event_type = 'EXIT',
+                    exit_camera_id = %s, exit_camera_name = %s
                 WHERE id = %s
-            """, (exit_image, merged_image, movement_id))
+            """, (exit_image, merged_image, exit_camera_id, exit_camera_name, movement_id))
         conn.commit()
     except Exception as e:
         log.error(f"Failed to update exit logs: {e}")

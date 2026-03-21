@@ -80,7 +80,8 @@
               <th class="att-th">Out</th>
               <th class="att-th">Status</th>
               <th class="att-th">Time</th>
-              <th class="att-th">Camera</th>
+              <th class="att-th">In Camera</th>
+              <th class="att-th">Out Camera</th>
               <th class="att-th">Phone</th>
               <th class="att-th">Date</th>
             </tr>
@@ -832,7 +833,8 @@
             <div><div class="details-label">Current Status</div><span class="badge-status ${r.status === 'IN' ? 'badge-in' : 'badge-out'}">${r.status || '-'}</span></div>
           </div>
           <div class="details-label">Email</div><div class="details-value">${r.email || '-'}</div>
-          <div class="details-label">First Seen Camera</div><div class="details-value">${r.camera_name || '-'}</div>
+          <div class="details-label">First Seen Camera (Entry)</div><div class="details-value">${r.entry_camera_name || r.camera_name || '-'}</div>
+          <div class="details-label">Last Seen Camera (Exit)</div><div class="details-value">${r.exit_camera_name || '-'}</div>
         </div>
         <div style="display:flex; flex-direction:column; gap:20px;">
           <div>
@@ -932,7 +934,8 @@
         </td>
         <td class="att-td"><span class="badge-status ${statusClass}">${statusText}</span></td>
         <td class="att-td" style="white-space:nowrap;">${r.timestamp || '-'}</td>
-        <td class="att-td">${r.camera_name || '—'}</td>
+        <td class="att-td">${r.entry_camera_name || r.camera_name || '—'}</td>
+        <td class="att-td">${r.exit_camera_name || '—'}</td>
         <td class="att-td">${r.phone || '-'}</td>
         <td class="att-td" style="font-size:12px; color:var(--muted);">${fmtDate(r.timestamp)}</td>
       </tr>

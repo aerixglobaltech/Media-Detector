@@ -464,6 +464,7 @@ class AIPipeline(threading.Thread):
                         person_type=p_type
                     )
                     if mv_id:
+                        td["movement_id"] = mv_id
                         # Auto-classify as human since it's from a person track
                         update_movement_classification(mv_id, 'human', 1.0)
 
@@ -602,10 +603,12 @@ class AIPipeline(threading.Thread):
                                 from app.services.attendance_service import update_exit_logs
                                 update_exit_logs(
                                     member_id=td.get("db_id"),
-                                    movement_id=None, 
+                                    movement_id=td.get("movement_id"), 
                                     exit_image=exit_image_path,
                                     merged_image="",
-                                    track_id=tid
+                                    track_id=tid,
+                                    exit_camera_name=self.camera_name,
+                                    exit_camera_id=self.camera_name
                                 )
                                 log.info(f"AI: Logged Formal Exit for Track {tid} (Evidence: {exit_image_path}) on Exit Camera")
                             else:

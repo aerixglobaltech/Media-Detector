@@ -62,6 +62,7 @@
             <th class="log-th">Member Type</th>
             <th class="log-th">Entry Time</th>
             <th class="log-th">Exit Time</th>
+            <th class="log-th">Camera</th>
             <th class="log-th" style="width:60px; text-align:center;">Actions</th>
           </tr>
         </thead>
@@ -270,6 +271,8 @@
             <div><div class="details-label">Current Status</div><span class="badge-status ${status === 'IN' ? 'badge-in' : 'badge-out'}" style="display:inline-block; font-size:11px; font-weight:700; border-radius:999px; padding:4px 10px; ${status === 'IN' ? 'background:var(--success-bg); color:var(--green);' : 'background:var(--surface2); color:var(--muted);'}">${status}</span></div>
           </div>
           <div><div class="details-label">Email</div><div class="details-value">${log.email || '-'}</div></div>
+          <div><div class="details-label">First Seen Camera (Entry)</div><div class="details-value">${log.entry_camera_name || log.camera_name || log.camera_id || '-'}</div></div>
+          <div><div class="details-label">Last Seen Camera (Exit)</div><div class="details-value">${log.exit_camera_name || '-'}</div></div>
         </div>
         <div style="display:flex; flex-direction:column; gap:20px;">
           <div>
@@ -455,13 +458,14 @@
                 <div style="font-weight:500;">${log.entry_time.split(' ')[0]}</div>
                 <div style="font-size:11px; color:var(--muted); margin-top:2px;">${log.entry_time.split(' ')[1]}</div>
               </td>
-              <td class="log-td" onclick='openMemberDetailsPage(${logJson})' style="white-space:nowrap;">
-                <div style="font-weight:500;">${log.exit_time !== '-' ? log.exit_time.split(' ')[0] : '-'}</div>
-                <div style="font-size:11px; color:var(--muted); margin-top:2px;">${log.exit_time !== '-' ? log.exit_time.split(' ')[1] : ''}</div>
-              </td>
-              <td class="log-td" style="text-align:center;">
-                <button class="actions-btn" onclick='openMemberDetailsPage(${logJson})'>⋮</button>
-              </td>
+                <td class="log-td" onclick='openMemberDetailsPage(${logJson})' style="white-space:nowrap;">
+                  <div style="font-weight:500;">${log.exit_time !== '-' ? log.exit_time.split(' ')[0] : '-'}</div>
+                  <div style="font-size:11px; color:var(--muted); margin-top:2px;">${log.exit_time !== '-' ? log.exit_time.split(' ')[1] : ''}</div>
+                </td>
+                <td class="log-td" onclick='openMemberDetailsPage(${logJson})'>${log.entry_camera_name || log.camera_name || log.camera_id || '—'}</td>
+                <td class="log-td" style="text-align:center;">
+                  <button class="actions-btn" onclick='openMemberDetailsPage(${logJson})'>⋮</button>
+                </td>
             </tr>
           `;
         }).join('');
