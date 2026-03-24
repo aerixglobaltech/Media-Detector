@@ -3,29 +3,27 @@
   --sidebar-width: 285px;
   --sidebar-collapsed-width: 72px;
   --bg-lightest: #fdfcff;
-  /* Near white lavender */
   --surface: #ffffff;
   --surface2: #f3f0ff;
-  /* Soft lavender */
   --surface3: #efebff;
-  /* Mid lavender */
-  --border: #e5e0ff;
-  --accent: #8b5cf6;
-  /* Primary Purple */
+  --border: #e2e8f0;
+  
+  --accent: #8b5cf6; /* Primary Purple */
   --accent2: #7c3aed;
-  /* Deep Violet */
   --accent3: #d8b4fe;
-  /* Light Lavender Accent */
-  --accent-dark: #a78bfa;
-  /* Lightened from #2e1065 to support dark text */
   --accent-soft: #ede9fe;
-  /* Very soft violet for subtle highlights */
+  --accent-glow: rgba(139, 92, 246, 0.25);
+  
   --green: #10b981;
   --red: #ef4444;
   --text: #020617;
-  --muted: #334155;
-  --shadow-sm: 0 1px 2px 0 rgba(139, 92, 246, 0.05);
-  --shadow-md: 0 10px 15px -3px rgba(139, 92, 246, 0.1);
+  --muted: #475569;
+  
+  /* Vibrant Purple Shadows */
+  --shadow-sm: 0 2px 4px rgba(139, 92, 246, 0.1);
+  --shadow-md: 0 12px 24px -6px rgba(139, 92, 246, 0.15);
+  --shadow-lg: 0 20px 40px -12px rgba(139, 92, 246, 0.2);
+  
   --success-bg: rgba(16, 185, 129, 0.05);
   --error-bg: rgba(239, 68, 68, 0.05);
   --accent-bg: linear-gradient(135deg, var(--accent-soft), var(--accent3));
@@ -33,31 +31,25 @@
 
 :root[data-theme='dark'] {
   --bg: #030712;
-  /* Deepest Midnight */
   --bg-lightest: #0f172a;
   --surface: #0f172a;
-  /* Dark Navy/Purple */
   --surface2: #1e293b;
   --surface3: #1e1b4b;
-  /* Deep Indigo surface */
-  --border: #334155;
+  --border: #1e293b;
+  
   --accent: #a78bfa;
-  /* Lighter purple for dark mode contrast */
   --accent2: #8b5cf6;
   --accent3: #4c1d95;
-  --accent-dark: #f5f3ff;
-  /* Text should be dark on light, light on dark maybe? No, let's keep it light for dark mode */
-  --accent-soft: rgba(139, 92, 246, 0.1);
+  --accent-soft: rgba(139, 92, 246, 0.12);
+  --accent-glow: rgba(139, 92, 246, 0.4);
+  
   --green: #22c55e;
   --red: #ef4444;
   --text: #f8fafc;
-  /* Crisp white text */
   --muted: #94a3b8;
-  /* Soft blue-gray muted text */
-  --shadow-sm: 0 4px 6px -1px rgba(0, 0, 0, 0.2);
-  --shadow-md: 0 10px 15px -3px rgba(0, 0, 0, 0.3);
-  --success-bg: rgba(34, 197, 94, 0.1);
-  --error-bg: rgba(239, 68, 68, 0.1);
+  
+  --shadow-sm: 0 4px 6px -1px rgba(0, 0, 0, 0.3);
+  --shadow-md: 0 12px 24px -4px rgba(0, 0, 0, 0.4);
   --accent-bg: linear-gradient(135deg, #1e1b4b, #2e1065);
 }
 

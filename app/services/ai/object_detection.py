@@ -132,7 +132,7 @@ class PersonDetector:
             frame,
             persist=persist,
             classes=classes,
-            conf=0.30, 
+            conf=0.25, # Lowered from 0.30 to catch more animal signals during rapid movement
             iou=0.5,
             device=self.device,
             verbose=False
@@ -145,7 +145,7 @@ class PersonDetector:
             
             # Log raw detections for debugging
             if len(result.boxes) > 0:
-                log.info(f"YOLO: Found {len(result.boxes)} persons in frame")
+                log.info(f"YOLO: Found {len(result.boxes)} detections in frame (classes: {classes})")
             
             # Fallback for frames where tracker might not have assigned IDs yet
             # We use UNIQUE negative IDs to prevent cache collisions in FaceRecognizer
@@ -161,6 +161,7 @@ class PersonDetector:
             for box, tid, conf, cls in zip(result.boxes.xyxy, ids, result.boxes.conf, result.boxes.cls):
                 x1, y1, x2, y2 = box.tolist()
                 bw, bh = x2 - x1, y2 - y1
+                cls_id = int(cls)
                 
                 # REJECTION FILTERS TO BLOCK CEILING FANS / ARTIFACTS:
                 # 1. Ceiling Zone: Ignore small objects in the top 15% of the frame (Fans)
@@ -171,12 +172,16 @@ class PersonDetector:
                 if bh < 30:
                     continue
                     
-                # 3. Aspect Ratio: Relaxed to 2.5 for wide desk posture
+                # 3. Aspect Ratio: 
+                # Humans (vertical) vs Animals (often horizontal/wide)
                 ratio = bw / bh
-                if ratio < 0.10 or ratio > 2.5:
-                    continue
+                if cls_id == self.PERSON_CLASS_ID:
+                    if ratio < 0.10 or ratio > 2.5: # Human aspect ratio guards
+                        continue
+                else:
+                    if ratio < 0.05 or ratio > 4.5: # Relaxed for animals (e.g. dogs walking/running)
+                        continue
                 
-                cls_id = int(cls)
                 track_id = int(tid)
                 tracks.append([x1, y1, x2, y2, float(conf), track_id, cls_id])
 

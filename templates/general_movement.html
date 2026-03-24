@@ -223,7 +223,7 @@ async function loadMemberLogs() {
                     </td>
                     <td><strong>${log.member_name || 'Anonymous Subject'}</strong></td>
                     <td>
-                        <span class="status-badge ${log.person_type === 'STAFF' ? 'status-success' : 'status-error'}" style="width: 70px; text-align: center;">
+                        <span class="status-badge ${log.person_type === 'STAFF' ? 'status-success' : (log.person_type === 'ANIMAL' ? 'status-animal' : 'status-error')}" style="width: 70px; text-align: center;">
                             ${log.person_type}
                         </span>
                     </td>

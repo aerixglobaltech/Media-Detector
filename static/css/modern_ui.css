@@ -346,19 +346,20 @@ h1, h2, h3, h4, .heading {
 /* Cards */
 .saas-card {
     background: var(--bg-surface);
-    border: 1px solid var(--border-light);
-    border-left: 3px solid var(--accent);
+    border: 1px solid var(--border-accent);
+    border-left: 4px solid var(--accent);
     border-radius: var(--radius-lg);
     padding: var(--s-6);
-    box-shadow: 0 4px 10px rgba(0, 0, 0, 0.2);
+    box-shadow: var(--shadow-md);
     transition: transform 0.3s ease, border-color 0.3s ease, box-shadow 0.3s ease;
+    position: relative;
+    overflow: hidden;
 }
 
 .saas-card:not(.no-border):hover {
     border-color: var(--accent);
-    transform: translateY(-2px);
-    box-shadow: 0 10px 25px rgba(0, 0, 0, 0.4);
-    background: linear-gradient(to right, rgba(139, 92, 246, 0.08), var(--bg-surface) 20%);
+    transform: translateY(-4px);
+    box-shadow: var(--shadow-lg), 0 0 20px var(--accent-glow);
 }
 
 .saas-card.no-border {
@@ -480,6 +481,11 @@ h1, h2, h3, h4, .heading {
 .status-warning {
     background: rgba(245, 158, 11, 0.1);
     color: var(--warning);
+}
+
+.status-animal {
+    background: rgba(72, 61, 139, 0.1); /* DarkSlateBlue */
+    color: #483d8b;
 }
 
 /* Forms */
