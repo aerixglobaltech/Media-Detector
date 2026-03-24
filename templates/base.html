@@ -62,10 +62,14 @@
     <aside class="saas-sidebar" id="sidebar">
       <div class="sidebar-logo">
         <div
-          style="width: 40px; height: 40px; background: var(--accent); border-radius: var(--radius-md); display: flex; align-items: center; justify-content: center; color: white;">
-          <i data-lucide="shield-check"></i>
+          style="width: 40px; height: 40px; background: var(--accent); border-radius: var(--radius-md); display: flex; align-items: center; justify-content: center; color: white; overflow: hidden;">
+          {% if sys_settings.get('logo_url') %}
+            <img src="{{ sys_settings.logo_url }}" style="width: 100%; height: 100%; object-fit: contain;">
+          {% else %}
+            <i data-lucide="shield-check"></i>
+          {% endif %}
         </div>
-        <span class="heading" style="font-size: 18px; letter-spacing: -0.5px;">Mission Control</span>
+        <span class="heading" style="font-size: 18px; letter-spacing: -0.5px;">{{ sys_settings.get('company_name', 'Mission Control') }}</span>
       </div>
 
       <!-- Scrollable Nav Container -->
