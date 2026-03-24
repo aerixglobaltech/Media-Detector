@@ -183,6 +183,7 @@
 const BRAND_RTSP_PATHS = {
   'hikvision':'/Streaming/Channels/101','hik':'/Streaming/Channels/101',
   'dahua':'/cam/realmonitor?channel=1&subtype=0','amcrest':'/cam/realmonitor?channel=1&subtype=0','imou':'/cam/realmonitor?channel=1&subtype=0',
+  'cp plus':'/cam/realmonitor?channel=1&subtype=0','cp+':'/cam/realmonitor?channel=1&subtype=0',
   'reolink':'/h264/ch0/main/av_stream','axis':'/axis-media/media.amp',
   'hanwha':'/profile1/media.smp','samsung':'/profile1/media.smp','wisenet':'/profile1/media.smp',
   'vivotek':'/live.sdp','sony':'/media/video1','bosch':'/rtsp_tunnel',
@@ -191,7 +192,8 @@ const BRAND_RTSP_PATHS = {
 };
 const BRAND_COLORS = {
   'hikvision':'#e02020','hik':'#e02020','dahua':'#0057b7','reolink':'#ff6600',
-  'axis':'#003087','amcrest':'#2563eb','imou':'#00a0e9','hanwha':'#002d62',
+  'axis':'#003087','amcrest':'#2563eb','imou':'#00a0e9','cp plus':'#0057b7','cp+':'#0057b7',
+'hanwha':'#002d62',
   'wisenet':'#002d62','samsung':'#1428a0','tp-link':'#4caf50','tapo':'#4caf50',
   'uniview':'#ff4500','bosch':'#e20015','vivotek':'#005bac','foscam':'#00529c',
   'onvif':'#6366f1','system':'#0f172a','generic':'#64748b','unknown':'#64748b',
@@ -357,14 +359,20 @@ function closeConfig(){
   activeCardEl=null; editingCameraId=null; clearPreview();
 }
 
+function smartEncode(str){
+  // Standard encodeURIComponent doesn't encode ! ' ( ) *
+  // We force encode them to match the backend's strict mode.
+  return encodeURIComponent(str).replace(/[!'()*]/g, c => '%' + c.charCodeAt(0).toString(16).toUpperCase());
+}
 function updateRtspPreview(){
   const ip=document.getElementById('f-ip').value||'—';
   const port=document.getElementById('f-port').value||'554';
-  const user=document.getElementById('f-user').value||'user';
-  const pass=document.getElementById('f-pass').value||'••••';
-  const p=document.getElementById('f-path').value||'/—';
+  const user=smartEncode(document.getElementById('f-user').value||'user');
+  const pass=smartEncode(document.getElementById('f-pass').value||'');
+  const p=document.getElementById('f-path').value||'/\u2014';
+  const displayPass=pass||'\u2022\u2022\u2022\u2022';
   const norm=p.startsWith('/')?p:'/'+p;
-  document.getElementById('rtsp-preview').textContent='rtsp://'+user+':'+pass+'@'+ip+':'+port+norm;
+  document.getElementById('rtsp-preview').textContent='rtsp://'+user+':'+displayPass+'@'+ip+':'+port+norm;
 }
 
 function copyRtsp(){

@@ -60,7 +60,7 @@ Source: "C:\Users\testi\.deepface\weights\retinaface.h5"; DestDir: "{app}\ai_mod
 Source: "C:\Users\testi\.deepface\weights\facial_expression_model_weights.h5"; DestDir: "{app}\ai_models\.deepface\weights"; Flags: ignoreversion; Components: models\emotion
 
 ; 2d. Action Recognition (SlowFast Hub Cache)
-Source: "C:\Users\testi\.cache\torch\hub\checkpoints\SLOWFAST_8x8_R50.pyth"; DestDir: "{app}\ai_models\.cache\torch\hub\checkpoints"; Flags: ignoreversion; Components: models\action
+Source: "C:\Users\testi\.cache\torch\hub\checkpoints\SLOWFAST_8x8_R50.pyth"; DestDir: "{app}\ai_models\hub\checkpoints"; Flags: ignoreversion; Components: models\action
 
 ; 3. Portable PostgreSQL Database (OPTIONAL)
 Source: "C:\Users\testi\CV\package\postgres\*"; DestDir: "{app}\package\postgres"; Flags: ignoreversion recursesubdirs createallsubdirs; Components: postgres

@@ -60,3 +60,6 @@ Thumbs.db
 .tox/
 .coverage
 htmlcov/
+
+# Local Portable Packages
+package/

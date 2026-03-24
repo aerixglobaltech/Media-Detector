@@ -296,11 +296,12 @@ async function loadDashboard() {
         document.getElementById('dash-cam-online').innerText = data.cam_online ?? 0;
         document.getElementById('dash-cam-total').innerText = data.cam_total ?? 0;
         document.getElementById('dash-staff').innerText = data.staff_total ?? 0;
-        document.getElementById('dash-users').innerText = data.user_total ?? 0;
+        document.getElementById('dash-events').innerText = data.user_total ?? 0;
 
         // Health Utility
         const updateHealth = (id, status, textMap) => {
             const el = document.getElementById(id);
+            if (!el) return; // Safety check
             const mapping = textMap[status] || { text: 'Unknown', class: 'status-warning' };
             el.innerText = mapping.text;
             el.className = 'status-badge ' + mapping.class;
@@ -328,7 +329,7 @@ async function loadDashboard() {
         document.getElementById('dash-cam-progress').style.width = pct + '%';
         
         document.getElementById('dash-staff-progress').style.width = Math.min(100, (data.staff_total / 100) * 100) + '%';
-        document.getElementById('dash-users-progress').style.width = Math.min(100, (data.user_total / 20) * 100) + '%';
+        document.getElementById('dash-event-progress').style.width = Math.min(100, (data.user_total / 20) * 100) + '%';
 
         // Trend Charts
         window.trend7d = data.attendance_trend || [];
