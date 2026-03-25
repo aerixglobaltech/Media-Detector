@@ -60,6 +60,8 @@ class CameraManager:
         self._active          = False
         self.camera_name      = ""
         self.stream_id        = 0
+        self._monitoring_nodes: dict[str, dict] = {} # {name: {"stream": VideoStream, "stop_evt": Event, "last_frame": ndarray}}
+        self._monitoring_lock = threading.Lock()
 
         # Determine upload folder for face recognition DB
         upload_folder = os.path.join(
@@ -80,54 +82,33 @@ class CameraManager:
     # ── Start / Stop ──────────────────────────────────────────────────────────
 
     def start(self, source, name: str = "Camera", **kwargs) -> None:
-        """Switch to a new camera source — models are NOT reloaded."""
-        self.stop_stream()     # stop old video + render thread only
-
-        log.info("Starting camera: %s  source=%s", name, source)
+        """Switch to a new camera instantly by promoting its background monitoring node."""
+        log.info("Switching view to: %s", name)
+        
+        roles = kwargs.get("roles", [])
+        
+        # Ensure the camera is being monitored in the background
+        # If it's already monitoring, this just returns True without doing anything
+        self.start_monitoring(source, name, roles=roles)
+        
         self.camera_name = name
         if self._pipeline:
             self._pipeline.camera_name = name
-            self._pipeline.camera_roles = kwargs.get("roles", [])
-        self._active          = True
-        self._render_stop_evt = threading.Event()
-        self.stream_id       += 1   # frontend polls this to detect camera switches
+            self._pipeline.camera_roles = roles
+            
+        self._active = True
+        self.stream_id += 1 
 
-        # Drain stale frames so new camera starts clean
-        while not self._frame_queue.empty():
-            try:
-                self._frame_queue.get_nowait()
-            except queue.Empty:
-                break
-
-        # Reset AI result to prevent ghost boxes appearing on the new camera
-        with self._result_lock:
-            self._result_store[0] = AIResult()
-            # Reset pipeline counts for new camera
-            self._pipeline.entries = 0
-            self._pipeline.exits = 0
-            self._pipeline._seen_ids = set()
-            self._pipeline._active_ids = set()
-            self._pipeline._entry_best_frames = {}
-            self._pipeline._exit_best_frames = {}
-            self._pipeline._best_entry_scores = {}
-            self._pipeline._best_exit_scores = {}
-            self._pipeline._track_start_time = {}
-            self._pipeline._db_sessions = {}
-            self._pipeline._exit_filenames = {}
-
-        stream = VideoStream(
-            source=source,
-            width=cfg.FRAME_WIDTH,
-            height=cfg.FRAME_HEIGHT,
-            target_fps=cfg.TARGET_FPS,
-        )
-        self._render_thread = threading.Thread(
-            target=self._render_loop,
-            args=(self._render_stop_evt, stream),
-            daemon=True,
-            name="Render",
-        )
-        self._render_thread.start()
+        # Start the global render thread if not already running
+        if self._render_thread is None or not self._render_thread.is_alive():
+            self._render_stop_evt = threading.Event()
+            self._render_thread = threading.Thread(
+                target=self._render_loop,
+                args=(self._render_stop_evt,),
+                daemon=True,
+                name="GlobalRender",
+            )
+            self._render_thread.start()
 
     def reload_faces(self) -> None:
         """Tell the AI pipeline to reload known face signatures."""
@@ -135,15 +116,48 @@ class CameraManager:
             self._pipeline.reload_faces()
 
     def stop_stream(self) -> None:
-        """Stop video capture + render thread.  AI pipeline keeps running."""
+        """Mute the main UI stream. Background AI monitoring continues."""
         self._active = False
-        self._render_stop_evt.set()
-        if self._render_thread and self._render_thread.is_alive():
-            self._render_thread.join(timeout=4)
-            self._render_thread = None
         with self._jpeg_lock:
             self._jpeg_buf = b""
         self._fps_val = 0.0
+
+    def start_monitoring(self, source, name: str, roles: list[str]) -> bool:
+        """Start a background stream for AI processing without changing the UI view."""
+        with self._monitoring_lock:
+            if name in self._monitoring_nodes:
+                return True # Already monitoring
+            
+            log.info(f"AI: Starting background monitoring for '{name}' (source={source})")
+            stop_evt = threading.Event()
+            try:
+                stream = VideoStream(source=source, width=cfg.FRAME_WIDTH, height=cfg.FRAME_HEIGHT, target_fps=5.0)
+                thread = threading.Thread(
+                    target=self._monitoring_loop,
+                    args=(stop_evt, stream, name, roles),
+                    daemon=True,
+                    name=f"Monitor_{name}"
+                )
+                thread.start()
+                self._monitoring_nodes[name] = {
+                    "stream": stream, 
+                    "stop_evt": stop_evt, 
+                    "thread": thread, 
+                    "last_frame": None,
+                    "roles": roles
+                }
+                return True
+            except Exception as e:
+                log.error(f"AI: Failed to start monitoring for '{name}': {e}")
+                return False
+
+    def stop_monitoring(self, name: str) -> None:
+        """Stop background monitoring for a specific camera."""
+        with self._monitoring_lock:
+            if name in self._monitoring_nodes:
+                node = self._monitoring_nodes.pop(name)
+                node["stop_evt"].set()
+                # Thread will exit on next read
 
     def stop_all(self) -> None:
         """Full shutdown — used only when the Flask app exits."""
@@ -155,79 +169,91 @@ class CameraManager:
 
     # ── Render Loop ───────────────────────────────────────────────────────────
 
-    def _render_loop(self, stop_evt: threading.Event, stream: VideoStream) -> None:
+    def _render_loop(self, stop_evt: threading.Event) -> None:
         """
-        Runs in its own thread.
-        `stream` is a local reference — safe even if the manager
-        reassigns its own attributes during a camera switch.
+        Global render thread. Pulls frames from the currently active monitoring node.
         """
         fps_ctr = FPSCounter(window=30)
+        while not stop_evt.is_set():
+            if not self._active or not self.camera_name:
+                time.sleep(0.1)
+                continue
+
+            # Find the monitoring node for the active camera
+            node = None
+            with self._monitoring_lock:
+                node = self._monitoring_nodes.get(self.camera_name)
+            
+            if not node or node.get("last_frame") is None:
+                time.sleep(0.01)
+                continue
+
+            frame = node["last_frame"].copy()
+            self._fps_val = fps_ctr.tick()
+
+            # Read latest AI result
+            with self._result_lock:
+                result = self._result_store[0]
+            
+            age = time.monotonic() - result.timestamp
+            tracks = result.tracks if age < cfg.RESULT_MAX_AGE_SEC else []
+
+            for tr in tracks:
+                draw_person(
+                    frame, tr.bbox_full, tr.track_id,
+                    emotion=tr.emotion,
+                    action=tr.action,
+                    identity=tr.identity,
+                )
+                if tr.face_bbox_full:
+                    draw_face(frame, tr.face_bbox_full, tr.track_id)
+
+            draw_status_bar(
+                frame,
+                motion=result.motion if age < cfg.RESULT_MAX_AGE_SEC else False,
+                n_persons=len(tracks),
+                fps=self._fps_val,
+                entries=result.entries,
+                exits=result.exits
+            )
+
+            # JPEG encode for the MJPEG route
+            ok2, jpg = cv2.imencode(".jpg", frame, [cv2.IMWRITE_JPEG_QUALITY, 85])
+            if ok2:
+                with self._jpeg_lock:
+                    self._jpeg_buf = jpg.tobytes()
+
+            time.sleep(1.0 / cfg.TARGET_FPS)
+
+    def _monitoring_loop(self, stop_evt: threading.Event, stream: VideoStream, name: str, roles: list[str]):
+        """Runs in background for AI processing of non-active cameras."""
         cap_idx = 0
         try:
             while not stop_evt.is_set():
                 ok, frame = stream.read()
                 if not ok or frame is None:
-                    if stop_evt.is_set():
-                        break
-                    time.sleep(0.02)
-                    continue
+                    if stop_evt.is_set(): break
+                    time.sleep(0.1); continue
 
-                # Cap processing to ~200 FPS to save CPU and show realistic stats
-                time.sleep(0.005)
-
-                cap_idx      += 1
-                self._fps_val = fps_ctr.tick()
+                # Update last frame for the main renderer
+                with self._monitoring_lock:
+                    if name in self._monitoring_nodes:
+                        self._monitoring_nodes[name]["last_frame"] = frame
 
                 # Feed the AI thread every N frames
                 if cap_idx % cfg.AI_THREAD_FRAME_SKIP == 0:
                     fh, fw = frame.shape[:2]
-                    ai_f   = cv2.resize(frame, (cfg.AI_FRAME_WIDTH, cfg.AI_FRAME_HEIGHT))
-                    self._pipeline._full_w = fw
-                    self._pipeline._full_h = fh
+                    ai_f = cv2.resize(frame, (cfg.AI_FRAME_WIDTH, cfg.AI_FRAME_HEIGHT))
                     try:
-                        self._frame_queue.put_nowait(ai_f)
-                    except queue.Full:
-                        pass
+                        self._frame_queue.put_nowait((ai_f, name, roles, (fw, fh)))
+                    except queue.Full: pass
 
-                # Read latest AI result
-                with self._result_lock:
-                    result = self._result_store[0]
-
-                age    = time.monotonic() - result.timestamp
-                tracks = result.tracks if age < cfg.RESULT_MAX_AGE_SEC else []
-
-                # Draw overlays
-                for tr in tracks:
-                    draw_person(
-                        frame, tr.bbox_full, tr.track_id,
-                        emotion=tr.emotion,
-                        action=tr.action,
-                        identity=tr.identity,
-                    )
-                    if tr.face_bbox_full:
-                        draw_face(frame, tr.face_bbox_full, tr.track_id)
-
-                draw_status_bar(
-                    frame,
-                    motion=result.motion if age < cfg.RESULT_MAX_AGE_SEC else False,
-                    n_persons=len(tracks),
-                    fps=self._fps_val,
-                    entries=result.entries,
-                    exits=result.exits
-                )
-
-                # JPEG encode and store for the MJPEG route
-                ok2, jpg = cv2.imencode(".jpg", frame, [cv2.IMWRITE_JPEG_QUALITY, 82])
-                if ok2:
-                    with self._jpeg_lock:
-                        self._jpeg_buf = jpg.tobytes()
-
+                cap_idx += 1
+                time.sleep(0.02)
         finally:
-            try:
-                stream.release()
-            except Exception:
-                pass
-            log.info("Render thread exited for: %s", self.camera_name)
+            try: stream.release()
+            except: pass
+            log.info(f"AI: Monitoring thread exited for: {name}")
 
     # ── Public accessors ──────────────────────────────────────────────────────
 

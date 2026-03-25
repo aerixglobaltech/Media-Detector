@@ -194,18 +194,41 @@ def get_all_cameras(force: bool = False, user_email: str | None = None) -> list[
             conn = get_db_connection()
             cur  = conn.cursor()
             cur.execute(
-                "SELECT id, name, brand, ip_address FROM local_cameras WHERE owner_email = %s",
+                "SELECT id, name, brand, ip_address, roles FROM local_cameras WHERE owner_email = %s",
                 (user_email,),
             )
+            import json
             for row in cur.fetchall():
+                # Parse roles (Handle both JSONB list and string)
+                r_list = row.get("roles", [])
+                if isinstance(r_list, str):
+                    try: r_list = json.loads(r_list)
+                    except: r_list = []
+                if not isinstance(r_list, list):
+                    r_list = []
+
                 cameras.append({
                     "id":     f"local_{row['id']}",
                     "name":   row["name"],
-                    "status": "≡ƒƒó Online",
+                    "status": "Online",
                     "type":   "local",
                     "brand":  row["brand"],
                     "ip":     row["ip_address"],
+                    "roles":  r_list
                 })
+            
+            # Also fetch metadata for hardcoded cameras (like webcam)
+            cur.execute("SELECT camera_id, roles FROM camera_metadata")
+            meta_map = {r["camera_id"]: r["roles"] for r in cur.fetchall()}
+            for cam in cameras:
+                if cam["id"] == "webcam" and "webcam" in meta_map:
+                    r_list = meta_map["webcam"]
+                    if isinstance(r_list, str):
+                        try: r_list = json.loads(r_list)
+                        except: r_list = []
+                    if isinstance(r_list, list):
+                        cam["roles"] = r_list
+
             cur.close()
             conn.close()
         except Exception as e:
@@ -217,10 +240,122 @@ def get_all_cameras(force: bool = False, user_email: str | None = None) -> list[
 # ΓöÇΓöÇΓöÇ Routes ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
 
 @camera_bp.route("/api/cameras")
+@login_required
 def api_cameras():
     user_email = session.get("user")
     cameras = get_all_cameras(user_email=user_email)
     return jsonify(cameras)
+
+
+@camera_bp.route("/api/monitoring/start_all", methods=["POST"])
+@login_required
+def api_start_all_monitoring():
+    """Trigger background monitoring for all local cameras."""
+    try:
+        count = start_all_monitoring()
+        return jsonify({"success": True, "count": count})
+    except Exception as e:
+        log.error("Start all monitoring error: %s", e)
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
+@camera_bp.route("/api/cameras/<cam_id>/roles", methods=["POST"])
+@login_required
+def api_update_camera_roles(cam_id: str):
+    """Save role assignments (Entry/Exit/General) for any camera."""
+    data = request.get_json(force=True)
+    roles = data.get("roles", [])
+    try:
+        conn = get_db_connection()
+        cur = conn.cursor()
+        
+        roles_json = __import__("json").dumps(roles)
+        
+        if cam_id.startswith("local_"):
+            db_id = cam_id.replace("local_", "")
+            cur.execute(
+                "UPDATE local_cameras SET roles = %s WHERE id = %s",
+                (roles_json, db_id)
+            )
+        else:
+            # For non-local (webcam/imou), use camera_metadata table
+            cur.execute("""
+                INSERT INTO camera_metadata (camera_id, roles)
+                VALUES (%s, %s)
+                ON CONFLICT (camera_id) DO UPDATE SET roles = EXCLUDED.roles
+            """, (cam_id, roles_json))
+            
+        conn.commit()
+        cur.close()
+        conn.close()
+        
+        # Ensure we clear any caches or notify the manager if needed
+        # (Though monitoring nodes usually poll or get updated on next restart)
+        global _camera_cache_ts
+        _camera_cache_ts = 0
+        
+        return jsonify({"success": True, "roles": roles})
+    except Exception as e:
+        log.error("Error updating camera roles: %s", e)
+        return jsonify({"error": str(e)}), 500
+
+
+def start_all_monitoring() -> int:
+    """Helper to initiate background AI threads for all configured cameras."""
+    try:
+        from app.db.session import get_db_connection
+        conn = get_db_connection()
+        cur = conn.cursor()
+        # Fetch all local cameras
+        cur.execute("SELECT name, ip_address, port, username, password, stream_path, roles FROM local_cameras")
+        rows = cur.fetchall()
+        
+        # Also fetch roles for the webcam
+        cur.execute("SELECT roles FROM camera_metadata WHERE camera_id = 'webcam'")
+        row_webcam = cur.fetchone()
+        
+        cur.close()
+        conn.close()
+
+        count = 0
+        import json
+        
+        # 1. Start Built-in Webcam (source=0)
+        webcam_roles = []
+        if row_webcam:
+            webcam_roles = row_webcam.get("roles", [])
+            if isinstance(webcam_roles, str):
+                try: webcam_roles = json.loads(webcam_roles)
+                except: webcam_roles = []
+            if not isinstance(webcam_roles, list):
+                webcam_roles = []
+            
+        log.info("Auto-starting monitor for: Webcam (Built-in) (source=0)")
+        if cam_mgr.start_monitoring(0, "Webcam (Built-in)", roles=webcam_roles):
+            count += 1
+
+        # 2. Start all IP Cameras from DB
+        for row in rows:
+            name = row["name"]
+            # Important: Build encoded RTSP URL to handle '#' correctly
+            url = _build_rtsp_url(row["ip_address"], row["port"], row["username"], row["password"], row["stream_path"])
+            
+            # Parse roles (Handle both JSONB list and string)
+            roles = row.get("roles", [])
+            if isinstance(roles, str):
+                try: roles = json.loads(roles)
+                except: roles = []
+            if not isinstance(roles, list):
+                roles = []
+
+            log.info("Auto-starting monitor for: %s", name)
+            if cam_mgr.start_monitoring(url, name, roles=roles):
+                count += 1
+        
+        return count
+    except Exception as e:
+        log.error("Failed to auto-start monitoring: %s", e)
+        return 0
 
 
 @camera_bp.route("/api/select", methods=["POST"])
@@ -235,7 +370,7 @@ def api_select():
         return jsonify({"error": "Camera not found"}), 404
 
     if cam["type"] == "webcam":
-        cam_mgr.start(0, cam["name"])
+        cam_mgr.start(0, cam["name"], roles=cam.get("roles", []))
 
     elif cam["type"] == "imou":
         try:
@@ -267,17 +402,9 @@ def api_select():
             if not row:
                 return jsonify({"error": "Local camera record not found"}), 404
 
-            ip, port, user, pw, path = (
-                row["ip_address"], row["port"], row["username"],
-                row["password"], row["stream_path"],
-            )
-            if user and pw:
-                rtsp_url = f"rtsp://{user}:{pw}@{ip}:{port}{path}"
-            else:
-                rtsp_url = f"rtsp://{ip}:{port}{path}"
-
+            rtsp_url = _build_rtsp_url(row["ip_address"], row["port"], row["username"], row["password"], row["stream_path"])
             log.info("Starting local RTSP: %s", rtsp_url)
-            cam_mgr.start(rtsp_url, cam["name"])
+            cam_mgr.start(rtsp_url, cam["name"], roles=cam.get("roles", []))
         except Exception as e:
             log.error("Local camera start error: %s", e)
             return jsonify({"error": str(e)}), 500
@@ -549,3 +676,10 @@ def api_local_camera_item(cam_id: int):
         return jsonify({"success": True})
     except Exception as e:
         return jsonify({"success": False, "error": str(e)}), 500
+
+
+# Auto-start monitoring for all cameras once the app is ready
+try:
+    start_all_monitoring()
+except Exception:
+    pass

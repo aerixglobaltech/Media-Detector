@@ -361,6 +361,9 @@ async function loadDashboard() {
         } else {
             presenceList.innerHTML = '<div style="grid-column: 1/-1; text-align: center; padding: var(--s-6); color: var(--text-tertiary);">No activity detected today.</div>';
         }
+        
+        // AUTO-START: Multi-Camera AI Monitoring
+        fetch('/api/monitoring/start_all', { method: 'POST' }).catch(err => console.error("Multi-Cam Start Error:", err));
 
     } catch (e) {
         console.error("Dashboard Load Error:", e);

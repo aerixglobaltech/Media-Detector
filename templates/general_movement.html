@@ -81,6 +81,7 @@
                 <thead>
                     <tr>
                         <th style="width: 80px;">IMAGE</th>
+                        <th style="width: 120px;">CAMERA</th>
                         <th>MEMBER ID</th>
                         <th>MEMBER NAME</th>
                         <th>MEMBER TYPE</th>
@@ -91,7 +92,7 @@
                 </thead>
                 <tbody id="logs-table-body">
                     <tr>
-                        <td colspan="7" style="padding: var(--s-10); text-align: center; color: var(--text-tertiary);">
+                        <td colspan="8" style="padding: var(--s-10); text-align: center; color: var(--text-tertiary);">
                             <div class="saas-spinner" style="margin: 0 auto var(--s-4);"></div>
                             Initializing spatial log sync...
                         </td>
@@ -211,12 +212,17 @@ async function loadMemberLogs() {
         const pagination = result.pagination;
 
         if (logs.length === 0) {
-            tbody.innerHTML = '<tr><td colspan="7" style="padding: 40px; text-align: center; color: var(--text-tertiary);">No movement telemetry identified for the selected parameters.</td></tr>';
+            tbody.innerHTML = '<tr><td colspan="8" style="padding: 40px; text-align: center; color: var(--text-tertiary);">No movement telemetry identified for the selected parameters.</td></tr>';
         } else {
             tbody.innerHTML = logs.map(log => `
                 <tr class="clickable-row" onclick='openDetails(${JSON.stringify(log)})'>
                     <td style="text-align: center;">
                         ${log.entry_image ? `<img src="${log.entry_image}" class="log-img-thumb" onclick="event.stopPropagation(); openImageModal('${log.entry_image}', 'AI Detection Trace - ${log.member_name || 'Anonymous'}')">` : '—'}
+                    </td>
+                    <td>
+                        <div style="font-size: 11px; font-weight: 700; color: var(--accent); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100px;" title="${log.entry_camera_name}">
+                            ${log.entry_camera_name}
+                        </div>
                     </td>
                     <td>
                         <span style="font-family: 'JetBrains Mono'; font-weight: 600; color: var(--accent);">${log.display_id || 'UNKNOWN'}</span>
@@ -228,8 +234,8 @@ async function loadMemberLogs() {
                         </span>
                     </td>
                     <td>
-                        <div style="font-weight: 500; font-size: 13px;">${log.entry_time.split(' ')[1]}</div>
-                        <div style="font-size: 10px; color: var(--text-tertiary);">${log.entry_time.split(' ')[0]}</div>
+                        <div style="font-weight: 500; font-size: 13px;">${log.entry_time !== '-' ? log.entry_time.split(' ')[1] : '—'}</div>
+                        <div style="font-size: 10px; color: var(--text-tertiary);">${log.entry_time !== '-' ? log.entry_time.split(' ')[0] : ''}</div>
                     </td>
                     <td>
                         <div style="font-weight: 500; font-size: 13px;">${log.exit_time !== '-' ? log.exit_time.split(' ')[1] : '—'}</div>
@@ -247,7 +253,7 @@ async function loadMemberLogs() {
         renderPagination(pagination);
         lucide.createIcons();
     } catch (e) {
-        tbody.innerHTML = `<tr><td colspan="7" style="padding: 40px; text-align: center; color: var(--error);">Uplink Failure: ${e.message}</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="8" style="padding: 40px; text-align: center; color: var(--error);">Uplink Failure: ${e.message}</td></tr>`;
     }
 }
 
@@ -331,6 +337,17 @@ function openDetails(log) {
                     <div>
                         <label class="heading" style="font-size: 11px; color: var(--text-tertiary);">OUT TIME</label>
                         <div style="font-weight: 700; font-size: 13px;">${log.exit_time}</div>
+                    </div>
+                </div>
+
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: var(--s-6);">
+                    <div>
+                        <label class="heading" style="font-size: 11px; color: var(--text-tertiary);">ENTRY CAMERA</label>
+                        <div style="font-weight: 700; font-size: 13px;">${log.entry_camera_name}</div>
+                    </div>
+                    <div>
+                        <label class="heading" style="font-size: 11px; color: var(--text-tertiary);">EXIT CAMERA</label>
+                        <div style="font-weight: 700; font-size: 13px;">${log.exit_camera_name || '—'}</div>
                     </div>
                 </div>
 

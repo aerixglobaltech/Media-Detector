@@ -1115,10 +1115,13 @@
           if (el) el.classList.add('active');
 
           const img = document.getElementById('stream-img');
-          img.classList.remove('visible');
           const ph = document.getElementById('placeholder');
-          ph.style.display = 'flex';
-          ph.querySelector('p').textContent = 'Connecting to camera...';
+          
+          // Only show placeholder if starting from scratch
+          if (!img.classList.contains('visible')) {
+            ph.style.display = 'flex';
+            ph.querySelector('p').textContent = 'Initial connection...';
+          }
 
           try {
             const res = await fetch('/api/select', {
@@ -1127,15 +1130,20 @@
               body: JSON.stringify({ id }),
             });
             const data = await res.json();
-            if (data.error) { ph.querySelector('p').textContent = 'Error: ' + data.error; return; }
+            if (data.error) { 
+              if (!img.classList.contains('visible')) ph.querySelector('p').textContent = 'Error: ' + data.error; 
+              return; 
+            }
 
             activeCamId = id;
 
-            // Use unique URL to force a new MJPEG connection every time
-            img.src = '/video_feed?cam=' + encodeURIComponent(id) + '&t=' + Date.now();
-            img.classList.add('visible');
-            ph.style.display = 'none';
-            ph.querySelector('p').textContent = 'Select a camera from the left panel to begin';
+            // Only set src if not already playing. 
+            // If already playing, the backend /video_feed has already swapped the source frames!
+            if (!img.classList.contains('visible')) {
+              img.src = '/video_feed?t=' + Date.now();
+              img.classList.add('visible');
+              ph.style.display = 'none';
+            }
 
             document.getElementById('live-badge').style.display = 'block';
             document.getElementById('cam-label').style.display = 'block';
@@ -1147,7 +1155,7 @@
             statsInterval = setInterval(fetchStats, 1000);
 
           } catch (e) {
-            ph.querySelector('p').textContent = 'Failed: ' + e.message;
+            if (!img.classList.contains('visible')) ph.querySelector('p').textContent = 'Failed: ' + e.message;
           }
         }
 

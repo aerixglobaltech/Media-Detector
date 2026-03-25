@@ -82,6 +82,9 @@ def log_person(
     detected_at: datetime | None = None,
     track_id: int | None = None,
     event_type: str | None = 'ENTRY',
+    entry_time: datetime | None = None,
+    exit_time: datetime | None = None,
+    roles: list[str] | None = None
 ):
     """Store human detections (staff/unknown) in member_timestamp."""
     detected_at = detected_at or datetime.now()
@@ -98,10 +101,10 @@ def log_person(
         cur = conn.cursor()
         cur.execute("""
             INSERT INTO member_timestamp 
-            (camera_id, camera_name, person_type, staff_id, staff_name, image_path, confidence_score, detected_at, track_id, event_type)
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+            (camera_id, camera_name, person_type, staff_id, staff_name, image_path, confidence_score, detected_at, track_id, event_type, entry_time, exit_time)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
             RETURNING id
-        """, (camera_id, camera_id, person_type, staff_id, staff_name, image_path, confidence, detected_at, track_id, event_type))
+        """, (camera_id, camera_id, person_type, staff_id, staff_name, image_path, confidence, detected_at, track_id, event_type, entry_time, exit_time))
         row = cur.fetchone()
         conn.commit()
         res_id = row["id"] if row else None
@@ -110,7 +113,7 @@ def log_person(
         if staff_id and person_type.lower() == 'staff':
             try:
                 from app.services.attendance_service import track_staff_attendance
-                track_staff_attendance(staff_id, staff_name=staff_name, entry_image=image_path, camera_name=camera_id)
+                track_staff_attendance(staff_id, staff_name=staff_name, entry_image=image_path, camera_name=camera_id, roles=roles)
             except Exception as e:
                 log.warning(f"Failed to auto-trigger attendance in log_person: {e}")
 
@@ -256,11 +259,23 @@ def track_staff_attendance(
     detected_at: datetime | None = None,
     entry_image: str | None = None,
     camera_name: str | None = "Camera",
+    roles: list[str] | None = None
 ) -> dict:
     """One-row-per-day attendance: first entry fixed, last exit keeps updating."""
     detected_at = detected_at or datetime.now()
     today = detected_at.date()
     result = {"is_first_entry": False, "attendance_date": today}
+    
+    # Determine status based on camera roles
+    # If it's an 'exit' role and NOT 'entry' or 'general', mark as OUT
+    is_exit_only = False
+    if roles:
+        role_list = [r.lower() for r in roles]
+        if 'exit' in role_list and 'entry' not in role_list and 'general' not in role_list:
+            is_exit_only = True
+    
+    status_to_set = 'OUT' if is_exit_only else 'IN'
+    
     conn = get_db_connection()
     try:
         cur = conn.cursor()
@@ -282,10 +297,10 @@ def track_staff_attendance(
                         staff_id, staff_name, attendance_date, first_entry_time, last_exit_time,
                         in_time, out_time, entry_image, in_image, out_image, status, movement_count, day_status, timestamp, camera_name
                     )
-                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, 'IN', 1, 'open', %s, %s)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, 1, 'open', %s, %s)
                 """, (
                     staff_id, staff_name, today, detected_at, detected_at,
-                    detected_at, detected_at, entry_image, entry_image, entry_image, detected_at, camera_name
+                    detected_at, detected_at, entry_image, entry_image, entry_image, status_to_set, detected_at, camera_name
                 ))
             else:
                 log.info(f"DEBUG: Updating EXISTING attendance record {record['id']}")
@@ -293,7 +308,7 @@ def track_staff_attendance(
                     UPDATE attendance
                     SET last_exit_time = %s,
                         out_time = %s,
-                        status = 'IN',
+                        status = %s,
                         movement_count = COALESCE(movement_count, 0) + 1,
                         timestamp = %s,
                         staff_name = COALESCE(staff_name, %s),
@@ -303,7 +318,7 @@ def track_staff_attendance(
                         camera_name = COALESCE(camera_name, %s)
                     WHERE staff_id = %s AND attendance_date = %s
                 """, (
-                    detected_at, detected_at, detected_at, staff_name, entry_image, entry_image, entry_image, camera_name,
+                    detected_at, detected_at, status_to_set, detected_at, staff_name, entry_image, entry_image, entry_image, camera_name,
                     staff_id, today
                 ))
         except Exception as schema_exc:

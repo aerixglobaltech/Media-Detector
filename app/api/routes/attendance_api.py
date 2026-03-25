@@ -303,7 +303,7 @@ def _fetch_logs_from_table(table_name: str):
                 m.person_type, 
                 m.staff_id, 
                 COALESCE(s.name, m.staff_name) AS member_name, 
-                COALESCE(m.entry_time, m.detected_at) as entry_time,
+                m.entry_time, 
                 m.detected_at,
                 m.exit_time,
                 m.camera_name as entry_camera_name,
@@ -408,7 +408,7 @@ def _export_logs_from_table(table_name: str, filename_prefix: str):
                 m.person_type, 
                 s.staff_id as display_id,
                 COALESCE(s.name, m.staff_name) AS staff_name,
-                m.camera_id,
+                COALESCE(m.camera_name, m.camera_id) as camera_name,
                 m.confidence_score
             FROM {table_name} m
             LEFT JOIN staff_profiles s ON m.staff_id = s.id
@@ -439,7 +439,7 @@ def _export_logs_from_table(table_name: str, filename_prefix: str):
             ws.cell(row=row_idx, column=2, value=r['person_type'].capitalize() if r['person_type'] else 'Unknown')
             ws.cell(row=row_idx, column=3, value=r['display_id'] or '')
             ws.cell(row=row_idx, column=4, value=r['staff_name'] or '')
-            ws.cell(row=row_idx, column=5, value=r['camera_id'] or '')
+            ws.cell(row=row_idx, column=5, value=r['camera_name'] or '')
             ws.cell(row=row_idx, column=6, value=round(float(r['confidence_score']), 2) if r['confidence_score'] else 0.00)
 
         # Auto-fit columns
