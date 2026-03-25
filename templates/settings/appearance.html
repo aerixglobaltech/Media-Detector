@@ -191,7 +191,7 @@
                         </div>
                     </div>
                     <label class="saas-toggle">
-                        <input type="checkbox" id="check-sidebar" onchange="saveAppSetting('sidebar_toggle', this.checked ? 'true' : 'false'); window.sidebarToggleEnabled = this.checked;">
+                        <input type="checkbox" id="check-sidebar" onchange="saveAppSetting('sidebar_toggle', this.checked ? 'true' : 'false'); sidebarOptimizationEnabled = this.checked; if (!this.checked) { document.getElementById('app-layout').classList.remove('sidebar-collapsed'); localStorage.setItem('sidebar-collapsed', 'false'); }">
                         <span class="toggle-slider"></span>
                     </label>
                 </div>

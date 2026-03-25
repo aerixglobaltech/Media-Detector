@@ -54,7 +54,8 @@
   <div class="app-layout" id="app-layout">
     <script>
       // Persistent Sidebar Init (Prevents Flickering)
-      if (localStorage.getItem('sidebar-collapsed') === 'true') {
+      var sidebarOptimizationEnabled = '{{ sys_settings.get("sidebar_toggle", "false") }}' === 'true';
+      if (sidebarOptimizationEnabled && localStorage.getItem('sidebar-collapsed') === 'true') {
         document.getElementById('app-layout').classList.add('sidebar-collapsed');
       }
     </script>
@@ -227,6 +228,7 @@
 
     // Sidebar Toggle
     function toggleSidebar() {
+      if (!sidebarOptimizationEnabled) return; // Respect Sidebar Optimization setting
       const layout = document.getElementById('app-layout');
       const isCollapsed = layout.classList.toggle('sidebar-collapsed');
       localStorage.setItem('sidebar-collapsed', isCollapsed);

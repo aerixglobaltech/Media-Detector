@@ -123,7 +123,14 @@
                     <label class="att-label">Role Definition</label>
                     <input type="text" id="role-desc" class="saas-input" placeholder="Explain the primary responsibilities for this role.">
                 </div>
-                
+                <div class="att-field">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: var(--s-3);">
+                        <label class="att-label" style="margin: 0;">Permission Scopes</label>
+                        <label style="display: flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 700; color: var(--accent); cursor: pointer;">
+                            <input type="checkbox" id="perm-all" style="cursor: pointer;">
+                            Full Administrator Rights
+                        </label>
+                    </div>
                     <div style="background: var(--bg-surface-alt); border-radius: var(--radius-lg); border: 1px solid var(--border-main); overflow: hidden;">
                         <div id="module-perms-container">
                             <!-- Dynamic Module Rows -->

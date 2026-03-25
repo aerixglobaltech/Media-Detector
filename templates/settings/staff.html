@@ -597,11 +597,10 @@ async function uploadStaffPhotos() {
     const name = document.getElementById('staff-name-input').value.trim();
     if (!name) { alert("Identity requires a recognition name."); return; }
 
-    const status = document.getElementById('upload-status');
-    status.innerText = "Synchronising recognition data...";
-    status.style.color = "var(--accent)";
-    status.style.borderColor = "var(--accent-glow)";
-    status.style.background = "var(--accent-soft)";
+    const btn = document.getElementById('save-staff-btn');
+    const originalText = btn.innerHTML;
+    btn.innerHTML = `<i data-lucide="loader" style="width: 18px;" class="lucide-spin"></i> Synchronising...`;
+    btn.disabled = true;
 
     const fData = new FormData();
     fData.append('staff_name', name);
@@ -618,19 +617,26 @@ async function uploadStaffPhotos() {
     try {
         const res = await fetch('/api/upload_staff', { method: 'POST', body: fData });
         const data = await res.json();
-        if (data.status === 'success') {
-            status.innerText = "Recognition Enrolment Successful.";
-            status.style.color = "var(--success)";
-            status.style.borderColor = "var(--success)";
-            status.style.background = "rgba(16, 185, 129, 0.1)";
-            setTimeout(() => { loadSavedStaff(); closeStaffCreate(); }, 1500);
+        if (data.status === 'success' || data.success === True || data.success === true) {
+            btn.innerHTML = `<i data-lucide="check" style="width: 18px;"></i> Success!`;
+            btn.style.background = "var(--success)";
+            setTimeout(() => { 
+                loadSavedStaff(); 
+                closeStaffCreate();
+                btn.innerHTML = originalText;
+                btn.style.background = "";
+                btn.disabled = false;
+            }, 1000);
         } else {
-            status.innerText = "Uplink Failed: " + data.message;
-            status.style.color = "var(--error)";
-            status.style.borderColor = "var(--error)";
-            status.style.background = "rgba(239, 68, 68, 0.1)";
+            alert("Uplink Failed: " + (data.message || data.error));
+            btn.innerHTML = originalText;
+            btn.disabled = false;
         }
-    } catch (e) { status.innerText = "Critical Uplink Error."; status.style.color = "var(--error)"; }
+    } catch (e) { 
+        alert("Critical Uplink Error.");
+        btn.innerHTML = originalText;
+        btn.disabled = false;
+    }
 }
 
 async function deleteStaffProfile() {
