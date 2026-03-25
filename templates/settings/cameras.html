@@ -3,222 +3,257 @@
 {% set sub_page = 'cameras' %}
 
 {% block content %}
-<div class="cam-page">
-
-  <!-- ΓöÇΓöÇ Left Panel: Discovery ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ -->
-  <div class="cam-left">
-
-    <!-- Connected Cameras -->
-    <div class="cam-section">
-      <div class="cam-section-header">
-        <span class="cam-section-title">Connected Cameras</span>
-        <span class="cam-badge" id="connected-count">0</span>
-      </div>
-      <div id="connected-list">
-        <div class="cam-empty-state">No cameras added yet.</div>
-      </div>
-    </div>
-
-    <!-- Divider -->
-    <div class="cam-divider"></div>
-
-    <!-- Discovery -->
-    <div class="cam-section" style="flex:1; overflow:hidden; display:flex; flex-direction:column;">
-      <div class="cam-section-header">
-        <span class="cam-section-title">Network Scan</span>
-        <button id="scan-btn" class="cam-scan-btn" onclick="startScan()">
-          <svg id="scan-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
-          <span id="scan-label">Scan Network</span>
-        </button>
-      </div>
-
-      <div id="scan-status" class="cam-scan-status" style="display:none;">
-        <div class="cam-scan-progress"><div class="cam-scan-bar"></div></div>
-        <span id="scan-status-text" class="cam-scan-status-text">Scanning subnet...</span>
-      </div>
-
-      <div id="scan-results" style="flex:1; overflow-y:auto; margin-top:8px;">
-        <div class="cam-empty-state">Run a scan to discover cameras on your network.</div>
-      </div>
-    </div>
-
-  </div>
-
-  <!-- ΓöÇΓöÇ Right Panel: Camera Configuration ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ -->
-  <div class="cam-right">
-
-    <div id="cam-empty" class="cam-config-empty">
-      <div class="cam-config-empty-icon">
-        <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M15 10l4.553-2.069A1 1 0 0121 8.87V15.13a1 1 0 01-1.447.9L15 14M3 8a2 2 0 012-2h10a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2V8z"/></svg>
-      </div>
-      <p class="cam-config-empty-title">No camera selected</p>
-      <p class="cam-config-empty-sub">Select a detected camera from the scan results, or add one manually.</p>
-      <button class="cam-add-manual-btn" onclick="openManualForm()">+ Add Camera Manually</button>
-    </div>
-
-    <div id="cam-config" class="cam-config-panel" style="display:none;">
-      <div class="cam-config-header">
-        <div>
-          <div class="cam-config-title" id="config-title">Configure Camera</div>
-          <div class="cam-config-subtitle" id="config-subtitle">Fill in the details and test the connection.</div>
+<div class="cam-container fade-in">
+  <div class="cam-grid">
+    <!-- ── Left Column: Device Management ── -->
+    <div class="cam-sidebar">
+      <!-- Section: Connected -->
+      <div class="sidebar-group">
+        <div class="group-header">
+          <div class="group-title">
+            <i data-lucide="video" class="icon-sm"></i>
+            <span>Connected Devices</span>
+          </div>
+          <span class="sidebar-badge" id="connected-count">0</span>
         </div>
-        <button class="cam-config-close" onclick="closeConfig()" title="Close">&#x2715;</button>
-      </div>
-
-      <div id="config-brand-pill" class="cam-brand-pill" style="display:none;"></div>
-
-      <div class="cam-fields">
-        <div class="cam-field-group" style="grid-column: 1/-1;">
-          <label class="cam-label">Friendly Name</label>
-          <input id="f-name" class="cam-input" type="text" placeholder="e.g. Front Entrance" autocomplete="off"/>
-        </div>
-        <div class="cam-field-group">
-          <label class="cam-label">IP Address</label>
-          <input id="f-ip" class="cam-input" type="text" placeholder="192.168.1.100" autocomplete="off" oninput="updateRtspPreview()"/>
-        </div>
-        <div class="cam-field-group">
-          <label class="cam-label">Port</label>
-          <input id="f-port" class="cam-input" type="number" value="554" min="1" max="65535" oninput="updateRtspPreview()"/>
-        </div>
-        <div class="cam-field-group">
-          <label class="cam-label">Username</label>
-          <input id="f-user" class="cam-input" type="text" placeholder="admin" value="admin" autocomplete="off" oninput="updateRtspPreview()"/>
-        </div>
-        <div class="cam-field-group">
-          <label class="cam-label">Password</label>
-          <div class="cam-input-eye-wrap">
-            <input id="f-pass" class="cam-input" type="password" placeholder="admin" value="admin" autocomplete="new-password" oninput="updateRtspPreview()"/>
-            <button class="cam-eye-btn" type="button" onclick="togglePassword()" title="Show/hide password">
-              <svg id="eye-open" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
-              <svg id="eye-closed" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="display:none;"><path d="M17.94 17.94A10.07 10.07 0 0112 20c-7 0-11-8-11-8a18.45 18.45 0 015.06-5.94M9.9 4.24A9.12 9.12 0 0112 4c7 0 11 8 11 8a18.5 18.5 0 01-2.16 3.19m-6.72-1.07a3 3 0 11-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>
-            </button>
+        <div id="connected-list" class="sidebar-list">
+          <div class="empty-mini">
+            <i data-lucide="plus-circle" class="icon-lg mb-2" style="opacity: 0.2;"></i>
+            <p>No cameras added yet.</p>
           </div>
         </div>
-        <div class="cam-field-group" style="grid-column: 1/-1;">
-          <label class="cam-label">Stream Path <span class="cam-label-hint" id="brand-path-hint"></span></label>
-          <input id="f-path" class="cam-input cam-input-mono" type="text" placeholder="/Streaming/Channels/101" oninput="updateRtspPreview()"/>
-        </div>
-        <div class="cam-field-group" style="grid-column: 1/-1;">
-          <label class="cam-label">Generated RTSP URL
-            <button class="cam-copy-btn" onclick="copyRtsp()" title="Copy URL">
-              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>
-              Copy
-            </button>
-          </label>
-          <div id="rtsp-preview" class="cam-rtsp-preview">rtsp://admin:admin@&mdash;:554/&mdash;</div>
-        </div>
       </div>
 
-      <div id="cam-preview-box" class="cam-preview-box">
-        <div id="cam-preview-inner" class="cam-preview-placeholder">
-          <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="opacity:.3"><path d="M15 10l4.553-2.069A1 1 0 0121 8.87V15.13a1 1 0 01-1.447.9L15 14M3 8a2 2 0 012-2h10a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2V8z"/></svg>
-          <span>No preview</span>
-        </div>
-      </div>
+      <div class="sidebar-divider"></div>
 
-      <div class="cam-actions">
-        <button class="cam-btn-secondary" onclick="testConnection()">
-          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="9 11 12 14 22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/></svg>
-          Test Connection
-        </button>
-        <button id="save-btn" class="cam-btn-primary" onclick="saveCamera()">
-          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M19 21H5a2 2 0 01-2-2V5a2 2 0 012-2h11l5 5v11a2 2 0 01-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
-          Add Camera
-        </button>
+      <!-- Section: Discovery -->
+      <div class="sidebar-group flex-fill">
+        <div class="group-header">
+          <div class="group-title">
+            <i data-lucide="search" class="icon-sm"></i>
+            <span>Network Discovery</span>
+          </div>
+          <button id="scan-btn" class="saas-btn btn-primary btn-sm" onclick="startScan()">
+            <i data-lucide="zap" class="icon-xs" id="scan-icon"></i>
+            <span id="scan-label">Scan subnet</span>
+          </button>
+        </div>
+
+        <div id="scan-status" class="scan-status-panel" style="display:none;">
+          <div class="progress-container"><div class="progress-bar"></div></div>
+          <span id="scan-status-text" class="status-msg">Searching network...</span>
+        </div>
+
+        <div id="scan-results" class="sidebar-list scrollable">
+          <div class="empty-mini">
+            <i data-lucide="radar" class="icon-lg mb-2" style="opacity: 0.1;"></i>
+            <p>Run a scan to find cameras</p>
+          </div>
+        </div>
       </div>
     </div>
 
+    <!-- ── Right Column: Configuration Workspace ── -->
+    <div class="cam-workspace">
+      <!-- Empty State -->
+      <div id="cam-empty" class="workspace-placeholder">
+        <div class="placeholder-icon">
+          <i data-lucide="camera-off"></i>
+        </div>
+        <h2 class="placeholder-title">Ready for configuration</h2>
+        <p class="placeholder-sub">Select a device from the discovery list or configure one manually to start monitoring.</p>
+        <button class="saas-btn btn-secondary mt-4" onclick="openManualForm()">
+          <i data-lucide="settings-2"></i>
+          Add Camera Manually
+        </button>
+      </div>
 
+      <!-- Config Panel -->
+      <div id="cam-config" class="saas-card config-surface" style="display:none;">
+        <div class="config-header">
+          <div class="header-text">
+            <h1 class="config-h1" id="config-title">Device Provisioning</h1>
+            <p class="config-h2" id="config-subtitle">Configure stream parameters and verify handshake.</p>
+          </div>
+          <button class="close-btn" onclick="closeConfig()"><i data-lucide="x"></i></button>
+        </div>
+
+        <div id="config-brand-pill" class="brand-tag" style="display:none;"></div>
+
+        <div class="config-grid">
+          <div class="saas-input-group span-2">
+            <label><i data-lucide="type" class="icon-xs"></i> Label Name</label>
+            <input id="f-name" class="saas-input" type="text" placeholder="e.g. Warehouse 01" autocomplete="off"/>
+          </div>
+          
+          <div class="saas-input-group">
+            <label><i data-lucide="globe" class="icon-xs"></i> IP Target</label>
+            <input id="f-ip" class="saas-input" type="text" placeholder="192.168.1.XX" oninput="updateRtspPreview()"/>
+          </div>
+          
+          <div class="saas-input-group">
+            <label><i data-lucide="hash" class="icon-xs"></i> Port</label>
+            <input id="f-port" class="saas-input" type="number" value="554" oninput="updateRtspPreview()"/>
+          </div>
+
+          <div class="saas-input-group">
+            <label><i data-lucide="user" class="icon-xs"></i> Username</label>
+            <input id="f-user" class="saas-input" type="text" value="admin" oninput="updateRtspPreview()"/>
+          </div>
+
+          <div class="saas-input-group">
+            <label><i data-lucide="lock" class="icon-xs"></i> Security Key</label>
+            <div class="input-with-icon">
+              <input id="f-pass" class="saas-input" type="password" value="admin" oninput="updateRtspPreview()"/>
+              <button class="eye-toggle" type="button" onclick="togglePassword()">
+                <i data-lucide="eye" id="eye-open"></i>
+                <i data-lucide="eye-off" id="eye-closed" style="display:none;"></i>
+              </button>
+            </div>
+          </div>
+
+          <div class="saas-input-group span-2">
+            <label>
+              <i data-lucide="file-json-2" class="icon-xs"></i> Stream Definition
+              <span class="label-hint" id="brand-path-hint"></span>
+            </label>
+            <input id="f-path" class="saas-input font-mono" type="text" placeholder="/Streaming/Channels/101" oninput="updateRtspPreview()"/>
+          </div>
+
+          <div class="saas-input-group span-2">
+            <label class="d-flex justify-between">
+              <span><i data-lucide="link" class="icon-xs"></i> Protocol Handshake (RTSP)</span>
+              <button class="mini-copy-btn" onclick="copyRtsp()">
+                <i data-lucide="copy" class="icon-xs"></i> Copy URI
+              </button>
+            </label>
+            <div id="rtsp-preview" class="rtsp-console">rtsp://...</div>
+          </div>
+        </div>
+
+        <div class="preview-viewport">
+          <div id="cam-preview-inner" class="viewport-content">
+            <i data-lucide="monitor-play" style="opacity: 0.1; width: 48px; height: 48px;"></i>
+            <span>Handshake standby...</span>
+          </div>
+        </div>
+
+        <div class="config-footer">
+          <button class="saas-btn btn-secondary w-full" onclick="testConnection()">
+            <i data-lucide="play-circle"></i> Verify Handshake
+          </button>
+          <button id="save-btn" class="saas-btn btn-primary w-full" onclick="saveCamera()">
+            <i data-lucide="save"></i> Provision Device
+          </button>
+        </div>
+      </div>
+    </div>
   </div>
 </div>
 
 <style>
-.cam-page { display:grid; grid-template-columns:320px 1fr; height:calc(100vh - 53px); overflow:hidden; background:var(--bg); }
-.cam-left { background:var(--surface); border-right:1px solid var(--border); display:flex; flex-direction:column; overflow:hidden; padding:20px 0; }
-.cam-section { padding:0 16px; }
-.cam-section-header { display:flex; align-items:center; justify-content:space-between; margin-bottom:10px; }
-.cam-section-title { font-size:11px; font-weight:700; letter-spacing:.08em; text-transform:uppercase; color:var(--muted); }
-.cam-badge { font-size:11px; font-weight:700; background:var(--border); color:var(--muted); border-radius:20px; padding:1px 8px; min-width:22px; text-align:center; }
-.cam-divider { height:1px; background:var(--border); margin:16px 0; }
-.cam-empty-state { font-size:12px; color:var(--muted); text-align:center; padding:16px; border:1px dashed var(--border); border-radius:8px; }
+/* ── Layout ── */
+.cam-container { height: calc(100vh - 120px); }
+.cam-grid { display: grid; grid-template-columns: 320px 1fr; height: 100%; gap: var(--s-6); }
 
-.cam-scan-btn { display:flex; align-items:center; gap:6px; font-size:11px; font-weight:700; padding:5px 11px; border-radius:6px; border:none; background:var(--accent); color:white; cursor:pointer; transition:opacity .15s,transform .1s; }
-.cam-scan-btn:hover { opacity:.9; }
-.cam-scan-btn:active { transform:scale(.97); }
-.cam-scan-btn:disabled { opacity:.5; cursor:not-allowed; }
-@keyframes cam-spin { to { transform:rotate(360deg); } }
-.cam-scan-btn.scanning #scan-icon { animation:cam-spin .8s linear infinite; }
+/* ── Sidebar ── */
+.cam-sidebar { 
+  background: var(--bg-surface); 
+  border-radius: var(--radius-lg); 
+  border: 1px solid var(--border-main); 
+  display: flex; 
+  flex-direction: column; 
+  overflow: hidden; 
+  box-shadow: var(--shadow-sm);
+}
+.sidebar-group { padding: var(--s-5) var(--s-4); display: flex; flex-direction: column; }
+.flex-fill { flex: 1; overflow: hidden; }
+.sidebar-divider { height: 1px; background: var(--border-light); margin: 0 var(--s-4); }
 
-.cam-scan-status { margin:0 0 8px 0; }
-.cam-scan-progress { height:3px; background:var(--border); border-radius:2px; overflow:hidden; margin-bottom:5px; }
-@keyframes cam-progress { 0%{transform:translateX(-100%)} 100%{transform:translateX(400%)} }
-.cam-scan-bar { height:100%; width:40%; background:var(--accent); border-radius:2px; animation:cam-progress 1.4s ease-in-out infinite; }
-.cam-scan-status-text { font-size:11px; color:var(--muted); }
+.group-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: var(--s-4); }
+.group-title { display: flex; align-items: center; gap: var(--s-2); font-size: 11px; font-weight: 800; text-transform: uppercase; color: var(--text-tertiary); letter-spacing: 0.05em; }
+.sidebar-badge { background: var(--accent-soft); color: var(--accent); font-size: 10px; font-weight: 700; padding: 2px 8px; border-radius: var(--radius-full); }
 
-.cam-brand-group { margin-bottom:12px; }
-.cam-brand-header { display:flex; align-items:center; gap:8px; padding:4px 4px 6px 4px; }
-.cam-brand-icon { border-radius:6px; display:flex; align-items:center; justify-content:center; font-size:11px; font-weight:800; letter-spacing:-.5px; color:white; flex-shrink:0; }
-.cam-brand-name { font-size:12px; font-weight:700; color:var(--text); }
-.cam-brand-count { font-size:10px; color:var(--muted); margin-left:auto; }
+.sidebar-list { display: flex; flex-direction: column; gap: var(--s-2); }
+.scrollable { overflow-y: auto; padding-right: 4px; }
+.empty-mini { text-align: center; padding: var(--s-8) var(--s-4); font-size: 12px; color: var(--text-muted); border: 1px dashed var(--border-main); border-radius: var(--radius-md); }
 
-.cam-card { display:flex; align-items:center; gap:10px; padding:9px 10px; border-radius:8px; border:1px solid var(--border); background:var(--surface2); margin-bottom:6px; cursor:pointer; transition:border-color .15s,box-shadow .15s; }
-.cam-card:hover { border-color:var(--accent); box-shadow:0 0 0 3px rgba(37,99,235,.08); }
-.cam-card.active { border-color:var(--accent); background:var(--accent-bg); }
-.cam-card-dot { width:7px; height:7px; border-radius:50%; flex-shrink:0; }
-.cam-card-dot.green { background:var(--green); }
-.cam-card-dot.yellow { background:#f59e0b; }
-.cam-card-dot.blue { background:var(--accent); }
-.cam-card-info { flex:1; min-width:0; }
-.cam-card-name { font-size:12px; font-weight:600; color:var(--text); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
-.cam-card-sub { font-size:10px; color:var(--muted); margin-top:1px; font-family:'JetBrains Mono',monospace; }
-.cam-card-saved-badge { font-size:9px; font-weight:700; letter-spacing:.04em; background:var(--success-bg); color:var(--green); border-radius:4px; padding:1px 5px; white-space:nowrap; }
-.cam-card-remove { background:none; border:none; color:var(--muted); cursor:pointer; padding:2px 4px; font-size:11px; border-radius:4px; transition:color .15s,background .15s; }
-.cam-card-remove:hover { color:var(--red); background:var(--error-bg); }
-.cam-card-name-row { display:flex; align-items:center; gap:4px; }
-.cam-rename-btn { background:none; border:none; cursor:pointer; color:var(--muted); padding:2px; display:flex; align-items:center; opacity:0; transition:opacity .15s; }
-.cam-card:hover .cam-rename-btn { opacity:1; }
-.cam-rename-btn:hover { color:var(--accent); }
-.cam-rename-input { font-size:12px; font-weight:600; color:var(--text); background:var(--bg); border:1px solid var(--accent); border-radius:4px; padding:1px 6px; outline:none; width:140px; box-shadow:0 0 0 2px rgba(37,99,235,.15); }
+/* ── Workspace ── */
+.cam-workspace { display: flex; align-items: center; justify-content: center; }
+.workspace-placeholder { text-align: center; max-width: 400px; animation: slideUp 0.4s ease; }
+.placeholder-icon { width: 80px; height: 80px; background: var(--bg-surface); border-radius: 24px; border: 1px solid var(--border-main); display: flex; align-items: center; justify-content: center; margin: 0 auto var(--s-6); color: var(--text-muted); box-shadow: var(--shadow-md); }
+.placeholder-title { font-size: 20px; font-weight: 700; color: var(--text-primary); margin-bottom: var(--s-2); }
+.placeholder-sub { color: var(--text-tertiary); font-size: 14px; line-height: 1.6; }
 
-.cam-right { overflow-y:auto; padding:28px 32px; display:flex; flex-direction:column; }
-.cam-config-empty { flex:1; display:flex; flex-direction:column; align-items:center; justify-content:center; text-align:center; gap:10px; padding:40px; }
-.cam-config-empty-icon { width:68px; height:68px; border-radius:18px; background:var(--surface); border:1px solid var(--border); display:flex; align-items:center; justify-content:center; color:var(--muted); margin-bottom:4px; }
-.cam-config-empty-title { font-size:16px; font-weight:700; color:var(--text); margin:0; }
-.cam-config-empty-sub { font-size:13px; color:var(--muted); margin:0; max-width:280px; line-height:1.5; }
-.cam-add-manual-btn { margin-top:6px; padding:8px 18px; border:1px solid var(--border); border-radius:8px; background:var(--surface); color:var(--text); font-size:13px; font-weight:600; cursor:pointer; transition:border-color .15s; }
-.cam-add-manual-btn:hover { border-color:var(--accent); color:var(--accent); }
+/* ── Config Card ── */
+.config-surface { 
+  max-width: 720px; 
+  width: 100%; 
+  border-left: 4px solid var(--accent) !important; 
+  padding: var(--s-8) !important;
+  animation: modalIn 0.3s ease;
+}
+.config-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: var(--s-6); }
+.config-h1 { font-size: 20px; font-weight: 800; color: var(--text-primary); }
+.config-h2 { font-size: 13px; color: var(--text-tertiary); margin-top: 4px; }
+.close-btn { background: var(--bg-surface-alt); border: 1px solid var(--border-light); border-radius: var(--radius-sm); width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; cursor: pointer; color: var(--text-secondary); }
+.close-btn:hover { color: var(--error); border-color: var(--error); }
 
-.cam-config-panel { background:var(--surface); border:1px solid var(--border); border-radius:14px; padding:28px 32px; box-shadow:var(--shadow-sm); max-width:720px; width:100%; animation:cam-panel-in .18s ease; }
-@keyframes cam-panel-in { from{opacity:0;transform:translateY(6px)} to{opacity:1;transform:translateY(0)} }
-.cam-config-header { display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:16px; }
-.cam-config-title { font-size:18px; font-weight:800; color:var(--text); }
-.cam-config-subtitle { font-size:12px; color:var(--muted); margin-top:3px; }
-.cam-config-close { background:none; border:1px solid var(--border); border-radius:6px; width:28px; height:28px; cursor:pointer; color:var(--muted); font-size:13px; display:flex; align-items:center; justify-content:center; transition:color .15s,border-color .15s; }
-.cam-config-close:hover { color:var(--text); border-color:var(--text); }
-.cam-brand-pill { display:inline-flex; align-items:center; gap:6px; padding:4px 10px; border-radius:20px; font-size:11px; font-weight:700; margin-bottom:18px; }
+.brand-tag { display: inline-flex; align-items: center; gap: 6px; padding: 6px 12px; border-radius: var(--radius-full); font-size: 11px; font-weight: 700; margin-bottom: var(--s-6); border: 1px solid; }
 
-.cam-fields { display:grid; grid-template-columns:1fr 1fr; gap:14px 20px; margin-bottom:20px; }
-.cam-field-group { display:flex; flex-direction:column; gap:5px; }
-.cam-label { font-size:11px; font-weight:700; color:var(--text); display:flex; align-items:center; gap:6px; }
-.cam-label-hint { font-size:10px; font-weight:500; color:var(--muted); font-style:italic; }
-.cam-input { width:100%; padding:9px 12px; border:1px solid var(--border); border-radius:7px; font-size:13px; outline:none; background:var(--bg); color:var(--text); transition:border-color .15s,box-shadow .15s; font-family:'Inter',sans-serif; }
-.cam-input:focus { border-color:var(--accent); box-shadow:0 0 0 3px rgba(37,99,235,.1); }
-.cam-input-mono { font-family:'JetBrains Mono',monospace; font-size:12px; }
-.cam-input-eye-wrap { position:relative; }
-.cam-input-eye-wrap .cam-input { padding-right:38px; }
-.cam-eye-btn { position:absolute; right:10px; top:50%; transform:translateY(-50%); background:none; border:none; cursor:pointer; color:var(--muted); padding:2px; display:flex; align-items:center; transition:color .15s; }
-.cam-eye-btn:hover { color:var(--text); }
-.cam-rtsp-preview { font-family:'JetBrains Mono',monospace; font-size:11.5px; padding:10px 14px; background:var(--bg); border:1px solid var(--border); border-radius:7px; color:var(--accent); word-break:break-all; line-height:1.5; }
-.cam-copy-btn { display:inline-flex; align-items:center; gap:4px; font-size:10px; font-weight:600; padding:2px 7px; border:1px solid var(--border); border-radius:4px; background:var(--surface2); color:var(--muted); cursor:pointer; transition:color .15s,border-color .15s; }
-.cam-copy-btn:hover { color:var(--accent); border-color:var(--accent); }
+.config-grid { display: grid; grid-template-columns: 1fr 120px; gap: var(--s-4) var(--s-6); }
+.span-2 { grid-column: span 2; }
+.input-with-icon { position: relative; }
+.eye-toggle { position: absolute; right: 12px; top: 50%; transform: translateY(-50%); background: none; border: none; color: var(--text-muted); cursor: pointer; }
+.rtsp-console { font-family: 'JetBrains Mono', monospace; font-size: 12px; background: var(--bg-input); border: 1px solid var(--border-main); border-radius: var(--radius-md); padding: var(--s-3) var(--s-4); color: var(--accent); line-height: 1.5; word-break: break-all; }
+.mini-copy-btn { background: transparent; border: none; color: var(--accent); font-size: 11px; font-weight: 600; cursor: pointer; display: flex; align-items: center; gap: 4px; }
 
-.cam-preview-box { height:200px; background:#0c0c0c; border-radius:10px; overflow:hidden; margin-bottom:20px; }
-.cam-preview-placeholder { width:100%; height:100%; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:8px; color:#555; font-size:12px; }
-.cam-actions { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
-.cam-btn-secondary { display:flex; align-items:center; justify-content:center; gap:7px; padding:11px; border:1px solid var(--border); border-radius:8px; background:var(--surface2); color:var(--text); font-size:13px; font-weight:700; cursor:pointer; transition:border-color .15s; }
-.cam-btn-secondary:hover { border-color:var(--accent); color:var(--accent); }
-.cam-btn-primary { display:flex; align-items:center; justify-content:center; gap:7px; padding:11px; border:none; border-radius:8px; background:var(--accent); color:white; font-size:13px; font-weight:700; cursor:pointer; transition:opacity .15s; }
-.cam-btn-primary:hover { opacity:.88; }
+.preview-viewport { height: 240px; background: #000; border-radius: var(--radius-md); margin: var(--s-6) 0; overflow: hidden; position: relative; border: 1px solid var(--border-main); }
+.viewport-content { width: 100%; height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: var(--s-3); color: var(--text-muted); font-size: 13px; font-weight: 500; }
+.config-footer { display: flex; gap: var(--s-4); margin-top: var(--s-4); }
+
+/* ── Custom Cards (JS Generated) ── */
+.device-card { 
+  display: flex; align-items: center; gap: var(--s-3); padding: var(--s-4); 
+  background: var(--bg-surface); border: 1px solid var(--border-main); border-radius: var(--radius-md); 
+  cursor: pointer; transition: var(--transition);
+}
+.device-card:hover { border-color: var(--accent); transform: translateX(2px); background: var(--bg-surface-alt); }
+.device-card.selected-card { border-color: var(--accent) !important; background: var(--accent-soft) !important; box-shadow: 0 0 0 2px var(--accent-glow); }
+.device-card.selected-card .device-name { color: var(--accent) !important; }
+.dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+.dot.green { background: var(--success); box-shadow: 0 0 8px var(--success); }
+.dot.yellow { background: var(--warning); }
+.device-icon { width: 34px; height: 34px; border-radius: 8px; display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 800; color: white; }
+.device-info { flex: 1; min-width: 0; }
+.device-name { font-size: 14px; font-weight: 600; color: var(--text-primary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.device-sub { font-size: 11px; color: var(--text-tertiary); margin-top: 2px; font-family: 'JetBrains Mono', monospace; }
+.remove-btn { background: var(--bg-surface-alt); border: 1px solid var(--border-light); color: var(--text-muted); width: 28px; height: 28px; display: flex; align-items: center; justify-content: center; cursor: pointer; border-radius: 6px; transition: var(--transition); }
+.remove-btn:hover { background: rgba(239,68,68,0.1); color: var(--error); border-color: var(--error); }
+
+/* ── Scan Layout ── */
+.scan-status-panel { margin-bottom: var(--s-4); }
+.progress-container { height: 4px; background: var(--bg-surface-alt); border-radius: 2px; overflow: hidden; margin-bottom: var(--s-2); }
+.progress-bar { height: 100%; width: 40%; background: var(--accent); animation: progressLoop 1.5s infinite ease-in-out; }
+@keyframes progressLoop { 0%{transform:translateX(-100%)} 100%{transform:translateX(300%)} }
+.status-msg { font-size: 11px; color: var(--text-tertiary); font-weight: 500; }
+
+.brand-section { margin-top: var(--s-4); }
+.brand-label { display: flex; align-items: center; gap: var(--s-2); padding: var(--s-2) 4px; margin-bottom: var(--s-2); font-size: 11px; font-weight: 700; color: var(--text-muted); text-transform: uppercase; }
+
+/* ── Rename Logic ── */
+.rename-input { font-size: 13px; font-weight: 600; color: var(--text-primary); background: var(--bg-input); border: 1px solid var(--accent); border-radius: 4px; padding: 2px 8px; outline: none; width: 100%; box-shadow: 0 0 0 2px var(--accent-glow); }
+
+/* ── Utilities ── */
+.icon-xs { width: 14px; height: 14px; }
+.icon-sm { width: 16px; height: 16px; }
+.icon-lg { width: 32px; height: 32px; }
+.font-mono { font-family: 'JetBrains Mono', monospace; }
+.w-full { width: 100%; }
+.d-flex { display: flex; }
+.justify-between { justify-content: space-between; }
+.mt-4 { margin-top: var(--s-4); }
+.mb-2 { margin-bottom: var(--s-2); }
 </style>
 
 <script>
@@ -244,8 +279,6 @@ function getRtspPath(b){const k=(b||'').toLowerCase();for(const[key,v] of Object
 
 let detectedCameras=[],connectedCameras=[],editingCameraId=null,activeCardEl=null,previewStopTimer=null;
 
-
-
 async function loadConnected(){
   try{ const r=await fetch('/api/local_cameras'); connectedCameras=await r.json(); }catch(e){ connectedCameras=[]; }
   renderConnected();
@@ -253,59 +286,60 @@ async function loadConnected(){
 function renderConnected(){
   const list=document.getElementById('connected-list');
   document.getElementById('connected-count').textContent=connectedCameras.length;
-  if(!connectedCameras.length){ list.innerHTML='<div class="cam-empty-state">No cameras added yet.</div>'; return; }
+  if(!connectedCameras.length){ list.innerHTML='<div class="empty-mini">No cameras added yet.</div>'; return; }
   list.innerHTML=connectedCameras.map((c,i)=>{
     const color=getBrandColor(c.brand); const ini=getBrandInitials(c.brand||'IP');
-    return`<div class="cam-card" onclick="editConnected(${i})">
-      <div class="cam-card-dot green"></div>
-      <div class="cam-brand-icon" style="background:${color};width:26px;height:26px;font-size:9px;">${ini}</div>
-      <div class="cam-card-info">
-        <div class="cam-card-name-row">
-          <span class="cam-card-name" id="cam-name-${c.id}">${c.name}</span>
-          <button class="cam-rename-btn" onclick="event.stopPropagation();startRename(${c.id},${JSON.stringify(c.name)})" title="Rename">
-            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+    return`<div class="device-card" onclick="editConnected(${i})">
+      <div class="dot green"></div>
+      <div class="device-icon" style="background:${color}">${ini}</div>
+      <div class="device-info">
+        <div class="d-flex align-items-center gap-1">
+          <span class="device-name" id="cam-name-${c.id}">${c.name}</span>
+          <button class="icon-btn" style="width:20px;height:20px;" onclick="event.stopPropagation();startRename(${c.id},${JSON.stringify(c.name)})">
+            <i data-lucide="edit-3" style="width:12px;"></i>
           </button>
         </div>
-        <div class="cam-card-sub">${c.brand||'Camera'} &bull; ${c.ip||'\u2014'}:${c.port||554}</div>
+        <div class="device-sub">${c.ip||'\u2014'}</div>
       </div>
-      <button class="cam-card-remove" onclick="event.stopPropagation();removeCamera(${c.id})" title="Remove">&#x2715;</button>
+      <button class="remove-btn" onclick="event.stopPropagation();removeCamera(${c.id})"><i data-lucide="trash-2" style="width:14px;"></i></button>
     </div>`;
   }).join('');
+  lucide.createIcons();
 }
 async function removeCamera(id){ if(!confirm('Remove this camera?'))return; await fetch('/api/local_cameras/'+id,{method:'DELETE'}); await loadConnected(); if(editingCameraId===id)closeConfig(); }
 function editConnected(i){
   const c=connectedCameras[i]; if(!c)return;
   editingCameraId=c.id;
   openConfig({name:c.name,brand:c.brand||'',ip:c.ip,port:c.port||554,username:c.username||'admin',password:c.password||'admin',path:c.path||getRtspPath(c.brand),title:c.name,subtitle:'Edit connected camera'});
-  document.getElementById('save-btn').textContent='Update Camera';
+  document.getElementById('save-btn').innerHTML='<i data-lucide="save"></i> Update Camera';
+  lucide.createIcons();
 }
 
 async function startScan(){
   const btn=document.getElementById('scan-btn');
   const statusEl=document.getElementById('scan-status');
   const results=document.getElementById('scan-results');
-  btn.disabled=true; btn.classList.add('scanning');
+  btn.disabled=true; 
   document.getElementById('scan-label').textContent='Scanning...';
   statusEl.style.display='block';
-  document.getElementById('scan-status-text').textContent='Discovering cameras on your network...';
-  results.innerHTML='<div class="cam-empty-state">Scanning ΓÇö this may take 10ΓÇô30 seconds.</div>';
+  document.getElementById('scan-status-text').textContent='Discovering cameras...';
+  results.innerHTML='<div class="empty-mini">Scanning network...</div>';
   try{
     const r=await fetch('/api/local_cameras/detected?refresh=1');
     detectedCameras=await r.json();
     document.getElementById('scan-status-text').textContent=`Found ${detectedCameras.length} device(s).`;
     renderScanResults();
   }catch(e){
-    results.innerHTML='<div class="cam-empty-state" style="color:var(--red);">Scan failed. Check network access.</div>';
-    document.getElementById('scan-status-text').textContent='Scan failed.';
+    results.innerHTML='<div class="empty-mini" style="color:var(--error);">Scan failed.</div>';
   }finally{
-    btn.disabled=false; btn.classList.remove('scanning');
-    document.getElementById('scan-label').textContent='Scan Network';
-    setTimeout(()=>{statusEl.style.display='none';},3000);
+    btn.disabled=false; 
+    document.getElementById('scan-label').textContent='Scan subnet';
+    setTimeout(()=>{statusEl.style.display='none';},4000);
   }
 }
 function renderScanResults(){
   const results=document.getElementById('scan-results');
-  if(!detectedCameras.length){ results.innerHTML='<div class="cam-empty-state">No cameras found on this scan.</div>'; return; }
+  if(!detectedCameras.length){ results.innerHTML='<div class="empty-mini">No cameras found.</div>'; return; }
   const groups={};
   detectedCameras.forEach((cam,i)=>{
     const raw=cam.brand||(cam.protocol==='onvif'?'ONVIF':cam.type==='system'?'System':'Unknown');
@@ -318,51 +352,50 @@ function renderScanResults(){
     const color=getBrandColor(brand); const ini=getBrandInitials(brand);
     const cards=cams.map(cam=>{
       const isSaved=cam.ip&&savedIPs.has(cam.ip);
-      const displayPort=cam.rtsp_port||cam.port||'';
-      const sub=[cam.ip,displayPort?':'+displayPort:'',cam.protocol?' \u00B7 '+cam.protocol:''].filter(Boolean).join('');
       const dot=cam.status&&cam.status.includes('\uD83D\uDFE2')?'green':'yellow';
-      return`<div class="cam-card" onclick="selectDetected(${cam._index})" id="cam-card-${cam._index}">
-        <div class="cam-card-dot ${dot}"></div>
-        <div class="cam-card-info"><div class="cam-card-name">${cam.name}</div><div class="cam-card-sub">${sub||cam.source||'ΓÇö'}</div></div>
-        ${isSaved?'<span class="cam-card-saved-badge">SAVED</span>':''}
+      return `<div class="device-card" onclick="selectDetected(${cam._index})" id="cam-card-${cam._index}">
+        <div class="dot ${dot}"></div>
+        <div class="device-info">
+          <div class="device-name">${cam.name}</div>
+          <div class="device-sub">${cam.ip||'local'}</div>
+        </div>
+        ${isSaved?'<span class="sidebar-badge" style="background:var(--success);color:white;opacity:0.8;">SAVED</span>':''}
       </div>`;
     }).join('');
-    return`<div class="cam-brand-group">
-      <div class="cam-brand-header">
-        <div class="cam-brand-icon" style="background:${color};width:26px;height:26px;">${ini}</div>
-        <span class="cam-brand-name">${brand}</span>
-        <span class="cam-brand-count">${cams.length} found</span>
+    return`<div class="brand-section">
+      <div class="brand-label">
+        <div class="device-icon" style="background:${color};width:20px;height:20px;font-size:8px;">${ini}</div>
+        <span>${brand}</span>
       </div>${cards}
     </div>`;
   }).join('');
+  lucide.createIcons();
 }
 function selectDetected(index){
   const cam=detectedCameras[index]; if(!cam)return;
-  if(activeCardEl)activeCardEl.classList.remove('active');
+  if(activeCardEl)activeCardEl.classList.remove('selected-card');
   const el=document.getElementById('cam-card-'+index);
-  if(el){el.classList.add('active');activeCardEl=el;}
+  if(el){el.classList.add('selected-card');activeCardEl=el;}
   editingCameraId=null;
   const brand=cam.brand||(cam.protocol==='onvif'?'ONVIF':'');
   const port=cam.rtsp_port||cam.port||554;
-  // Use confirmed path from scan if available, else fall back to brand map
   const path=cam.rtsp_path||getRtspPath(brand);
-  const subtitle=(cam.ip||'local')+' \u00B7 '+(cam.brand||cam.protocol||'unknown')+
-    (cam.rtsp_path?' \u00B7 \u2713 path confirmed':'');
-  openConfig({name:cam.name||'Camera '+cam.ip,brand,ip:cam.ip||'',port,username:'admin',password:'admin',path,title:cam.name||'Detected Camera',subtitle});
-  document.getElementById('save-btn').textContent='Add Camera';
+  openConfig({name:cam.name||'Camera '+cam.ip,brand,ip:cam.ip||'',port,username:'admin',password:'admin',path,title:'Detected '+(brand||'Device'),subtitle:'Verify connection parameters'});
+  document.getElementById('save-btn').innerHTML='<i data-lucide="plus"></i> Provision Device';
+  lucide.createIcons();
 }
 
 function openConfig({name,brand,ip,port,username,password,path,title,subtitle}){
   document.getElementById('cam-empty').style.display='none';
   document.getElementById('cam-config').style.display='block';
-  document.getElementById('config-title').textContent=title||'Configure Camera';
+  document.getElementById('config-title').textContent=title||'Provision Device';
   document.getElementById('config-subtitle').textContent=subtitle||'';
   const pill=document.getElementById('config-brand-pill');
   if(brand){
     const color=getBrandColor(brand);
     pill.style.display='inline-flex'; pill.style.color=color;
     pill.style.borderColor=color+'33'; pill.style.background=color+'12';
-    pill.textContent='\u25CF '+brand.charAt(0).toUpperCase()+brand.slice(1);
+    pill.textContent='\u25CF '+brand.toUpperCase();
   } else { pill.style.display='none'; }
   document.getElementById('f-name').value=name||'';
   document.getElementById('f-ip').value=ip||'';
@@ -373,40 +406,36 @@ function openConfig({name,brand,ip,port,username,password,path,title,subtitle}){
   document.getElementById('eye-open').style.display='block';
   document.getElementById('eye-closed').style.display='none';
   document.getElementById('f-path').value=path||'';
-  const hintKey=(brand||'').toLowerCase();
-  let hint='';
-  for(const[k,v] of Object.entries(BRAND_RTSP_PATHS)){if(hintKey.includes(k)){hint='┬╖ '+v.split('?')[0].slice(0,28)+(v.length>28?'ΓÇª':'');break;}}
-  document.getElementById('brand-path-hint').textContent=hint;
-  clearPreview(); updateRtspPreview();
+  document.getElementById('brand-path-hint').textContent='';
+  clearPreview(); updateRtspPreview(); lucide.createIcons();
 }
 function openManualForm(){
   editingCameraId=null; if(activeCardEl)activeCardEl.classList.remove('active'); activeCardEl=null;
-  openConfig({name:'',brand:'',ip:'',port:554,username:'admin',password:'admin',path:'/Streaming/Channels/101',title:'Add Camera Manually',subtitle:'Enter camera details to connect.'});
-  document.getElementById('save-btn').textContent='Add Camera';
+  openConfig({name:'',brand:'',ip:'',port:554,username:'admin',password:'admin',path:'/Streaming/Channels/101',title:'Manual Entry',subtitle:'Directly provision via RTSP endpoint'});
+  document.getElementById('save-btn').innerHTML='<i data-lucide="save"></i> Provision Device';
+  lucide.createIcons();
 }
 function closeConfig(){
   document.getElementById('cam-config').style.display='none';
   document.getElementById('cam-empty').style.display='flex';
-  if(activeCardEl)activeCardEl.classList.remove('active');
+  if(activeCardEl)activeCardEl.classList.remove('selected-card');
   activeCardEl=null; editingCameraId=null; clearPreview();
 }
 
 function updateRtspPreview(){
-  const ip=document.getElementById('f-ip').value||'\u2014';
+  const ip=document.getElementById('f-ip').value||'...';
   const port=document.getElementById('f-port').value||'554';
   const user=document.getElementById('f-user').value||'user';
-  const pass=document.getElementById('f-pass').value||'\u2022\u2022\u2022\u2022';
-  const p=document.getElementById('f-path').value||'/\u2014';
+  const pass=document.getElementById('f-pass').value||'****';
+  const p=document.getElementById('f-path').value||'/...';
   const norm=p.startsWith('/')?p:'/'+p;
-  const u_enc=encodeURIComponent(user);
-  const p_enc=encodeURIComponent(pass);
-  document.getElementById('rtsp-preview').textContent='rtsp://'+u_enc+':'+p_enc+'@'+ip+':'+port+norm;
+  document.getElementById('rtsp-preview').textContent='rtsp://'+user+':'+pass+'@'+ip+':'+port+norm;
 }
-function extractRtspPath(url){if(!url)return'';const idx=url.indexOf('://',url.indexOf('://')+3);const sl=url.indexOf('/',url.indexOf('://')+3);return sl!==-1?url.slice(sl):'';}
 function copyRtsp(){
   navigator.clipboard.writeText(document.getElementById('rtsp-preview').textContent).then(()=>{
-    const b=document.querySelector('.cam-copy-btn'); b.textContent='\u2713 Copied!';
-    setTimeout(()=>{b.innerHTML='<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg> Copy';},1500);
+    const b=document.querySelector('.mini-copy-btn'); b.innerHTML='<i data-lucide="check" class="icon-xs"></i> Copied!';
+    lucide.createIcons();
+    setTimeout(()=>{b.innerHTML='<i data-lucide="copy" class="icon-xs"></i> Copy URI'; lucide.createIcons();},1500);
   });
 }
 function togglePassword(){
@@ -414,35 +443,31 @@ function togglePassword(){
   inp.type=hide?'text':'password';
   document.getElementById('eye-open').style.display=hide?'none':'block';
   document.getElementById('eye-closed').style.display=hide?'block':'none';
+  lucide.createIcons();
 }
 async function testConnection(){
   const ip=document.getElementById('f-ip').value.trim();
-  if(!ip){alert('IP Address is required for testing.');return;}
+  if(!ip){alert('IP Target required');return;}
   const payload={ip,port:parseInt(document.getElementById('f-port').value),username:document.getElementById('f-user').value,password:document.getElementById('f-pass').value,path:document.getElementById('f-path').value};
-  setPreview('Testing connection...');
+  setPreview('Initiating handshake...');
   try{
     const r=await fetch('/api/test_camera',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
     const data=await r.json();
     if(data.success&&data.stream_url){
-      const sep=data.stream_url.includes('?')?'&':'?';
-      const url=data.stream_url+sep+'_='+Date.now();
-      document.getElementById('cam-preview-inner').innerHTML='<img src="'+url+'" style="width:100%;height:100%;object-fit:cover;" onerror="setPreview(\'Connection Failed\')">';
-      if(previewStopTimer)clearTimeout(previewStopTimer);
-      previewStopTimer=setTimeout(()=>clearPreview(),10000);
-    } else { setPreview('Connection Failed'); }
-  }catch(e){ setPreview('Connection Failed'); }
+      const url=data.stream_url+(data.stream_url.includes('?')?'&':'?')+'_='+Date.now();
+      document.getElementById('cam-preview-inner').innerHTML='<img src="'+url+'" style="width:100%;height:100%;object-fit:cover;" onerror="setPreview(\'Handshake Failed\')">';
+    } else { setPreview('Handshake Failed'); }
+  }catch(e){ setPreview('Handshake Failed'); }
 }
-function setPreview(msg){ document.getElementById('cam-preview-inner').innerHTML='<div class="cam-preview-placeholder"><span>'+msg+'</span></div>'; }
-function clearPreview(){
-  if(previewStopTimer){clearTimeout(previewStopTimer);previewStopTimer=null;}
-  document.getElementById('cam-preview-inner').innerHTML='<div class="cam-preview-placeholder"><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="opacity:.3"><path d="M15 10l4.553-2.069A1 1 0 0121 8.87V15.13a1 1 0 01-1.447.9L15 14M3 8a2 2 0 012-2h10a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2V8z"/></svg><span>No preview</span></div>';
-}
+function setPreview(msg){ document.getElementById('cam-preview-inner').innerHTML='<div class="viewport-content"><span>'+msg+'</span></div>'; }
+function clearPreview(){ setPreview('Handshake standby...'); }
+
 function startRename(id, currentName){
   const nameEl=document.getElementById('cam-name-'+id);
   if(!nameEl)return;
   const input=document.createElement('input');
   input.value=currentName;
-  input.className='cam-rename-input';
+  input.className='rename-input';
   input.onclick=e=>e.stopPropagation();
   input.onkeydown=e=>{
     if(e.key==='Enter'){e.preventDefault();saveRename(id,input.value);}
@@ -455,25 +480,21 @@ function startRename(id, currentName){
 async function saveRename(id,newName){
   newName=(newName||'').trim();
   if(!newName){loadConnected();return;}
-  // Get existing camera data to preserve all fields on PUT
   const cam=connectedCameras.find(c=>c.id===id);
   if(!cam){loadConnected();return;}
   try{
-    const r=await fetch('/api/local_cameras/'+id,{
+    await fetch('/api/local_cameras/'+id,{
       method:'PUT',
       headers:{'Content-Type':'application/json'},
       body:JSON.stringify({name:newName,brand:cam.brand||'',ip:cam.ip,port:cam.port||554,username:cam.username||'',password:cam.password||'',path:cam.path||''})
     });
-    const data=await r.json();
-    if(data.success){await loadConnected();}
-    else{loadConnected();}
+    await loadConnected();
   }catch(e){loadConnected();}
 }
-
 async function saveCamera(){
   const name=document.getElementById('f-name').value.trim();
   const ip=document.getElementById('f-ip').value.trim();
-  if(!name||!ip){alert('Friendly Name and IP Address are required.');return;}
+  if(!name||!ip){alert('Name and IP are required.');return;}
   const pill=document.getElementById('config-brand-pill');
   const brand=pill.style.display!=='none'?pill.textContent.replace('\u25CF ','').trim():'';
   const payload={name,brand,ip,port:parseInt(document.getElementById('f-port').value),username:document.getElementById('f-user').value,password:document.getElementById('f-pass').value,path:document.getElementById('f-path').value};
@@ -483,9 +504,9 @@ async function saveCamera(){
     const r=await fetch(url,{method,headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
     const data=await r.json();
     if(data.success){await loadConnected();closeConfig();}
-    else alert('Save failed: '+(data.error||'Unknown error'));
-  }catch(e){alert('Save failed.');}
-
+    else alert('Provision failed: '+data.error);
+  }catch(e){alert('Network error during provisioning.');}
 }
+document.addEventListener('DOMContentLoaded', loadConnected);
 </script>
 {% endblock %}
