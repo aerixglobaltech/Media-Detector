@@ -201,9 +201,8 @@ class AIPipeline(threading.Thread):
                 gray = cv2.cvtColor(crop, cv2.COLOR_BGR2GRAY)
             else:
                 gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-            # Normalize Laplacian variance to [0.0, 1.0]. A value of 500+ is typically very sharp.
-            var = cv2.Laplacian(gray, cv2.CV_64F).var()
-            return var
+            # Return raw Laplacian variance for sharpest frame selection
+            return cv2.Laplacian(gray, cv2.CV_64F).var()
         except Exception:
             return 0.0
 
@@ -663,7 +662,9 @@ class AIPipeline(threading.Thread):
                                 person_type=person_type,
                                 staff_id=s_id,
                                 image_path=f"static/uploads/movement/{full_filename}", 
-                                confidence=td["best_clarity"],
+                                # Normalize confidence for DB/UI (Score out of 100)
+                                # 150 is a high baseline for very sharp frames
+                                confidence=min(1.0, td["best_clarity"] / 150.0),
                                 staff_name=current_id if person_type == "staff" else None,
                                 track_id=tid,
                                 event_type=e_type,
