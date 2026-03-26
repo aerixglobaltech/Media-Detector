@@ -26,6 +26,22 @@ A professional-grade, real-time AI monitoring and attendance system. It utilizes
 - **PostgreSQL** (Installed and running)
 - **Visual Studio C++ Build Tools** (Required for some AI libraries)
 
+---
+
+## 🏗️ Professional Deployment (RECOMMENDED)
+
+The best way to deliver this app to your clients is using our **Single-File Setup Installer**:
+
+1. **Build**: Run the `installer.iss` script via **Inno Setup**.
+2. **Setup**: The client runs `MediaDetector_Setup.exe`.
+3. **Launch**: A desktop shortcut "Media Detector" is created. It automatically starts Postgres, the AI Backend, and opens the Dashboard.
+
+*No technical knowledge or command prompt is required for the client.* 🚀
+
+---
+
+## :tools: Developer Quick Start
+
 ### 2. Installation
 ```powershell
 # 1. Clone the repository

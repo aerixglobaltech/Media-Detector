@@ -33,7 +33,9 @@ if (!(Test-Path "$PY_DIR\python.exe")) {
 
     # Fix Python path for isolated environment
     $PTH_FILE = "$PY_DIR\python310._pth"
-    Add-Content -Path $PTH_FILE -Value "..\.." # Add project root to sys.path
+    # Overwrite the default .pth to include project root and enable site-packages
+    $PTH_CONTENT = "python310.zip`r`n.`r`nimport site`r`n..\..`r`n"
+    Set-Content -Path $PTH_FILE -Value $PTH_CONTENT
 }
 
 # 4. Download & Extract Postgres

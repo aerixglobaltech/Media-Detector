@@ -66,15 +66,33 @@ def main():
 
     # 3. Wait for the server to be ready (Port 5000)
     print(">>> Waiting for Mission Control to start...")
-    max_retries = 30
-    for _ in range(max_retries):
+    max_retries = 60 # Increased timeout for heavy model loading
+    for i in range(max_retries):
+        # ACTIVE MONITORING: Stop if the process died
+        if backend.poll() is not None:
+            print("\n!!! ERROR: Application failed to start (Process exited).")
+            # Try to show the crash log if it exists
+            if os.path.exists("CRASH.log"):
+                with open("CRASH.log", "r") as f:
+                    print("-" * 40)
+                    print(f.read())
+                    print("-" * 40)
+            else:
+                print("Check 'app_debug.log' for details.")
+            input("Press Enter to exit...")
+            return
+
         if is_port_open(5000):
-            print(">>> System Ready! Opening Browser...")
+            print("\n>>> System Ready! Opening Browser...")
             webbrowser.open("http://localhost:5000")
             break
+        
+        # Simple progress indicator
+        sys.stdout.write(".")
+        sys.stdout.flush()
         time.sleep(1)
     else:
-        print("ERROR: Server took too long to start.")
+        print("\nERROR: Server took too long to start.")
         input("Press Enter to exit...")
 
     # Keep the launcher alive as long as the backend is running
