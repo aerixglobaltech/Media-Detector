@@ -31,6 +31,7 @@ class FaceDetector:
 
     # ------------------------------------------------------------------
     def detect_in_crop(
+        self,
         frame: np.ndarray,
         person_bbox: list[float],
         threshold: float | None = None
@@ -94,7 +95,7 @@ class FaceDetector:
             return False
         
         h, w = face_crop.shape[:2]
-        if h < 30 or w < 30: # Relaxed from 40 to 30 for distant faces
+        if h < 20 or w < 20: # Relaxed from 30 to 20 for distant faces
             return False
 
         # Sharpness check via Laplacian variance

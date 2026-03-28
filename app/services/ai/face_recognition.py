@@ -17,7 +17,7 @@ except Exception:
 class FaceRecognizer:
     def __init__(self, db_path: str = None, skip_frames: int = 15, backend: str = "opencv", model_name="Facenet512"):
         self.skip_frames = skip_frames
-        self.backend = "opencv" # Switched back to opencv for speed, but with enforce_detection=True
+        self.backend = backend # Use passed backend (default opencv)
         self.model_name = "Facenet512"
         self.db_path = db_path
         self._cache: dict[int, dict] = {} # Changed to store dict results
@@ -44,6 +44,7 @@ class FaceRecognizer:
             conn = get_db_connection()
             cur = conn.cursor()
             
+            print(f"DEBUG: FaceRec: Scanning {db_path} for staff faces...")
             log.info("FaceRec: Scanning %s for staff faces...", db_path)
             loaded_faces = []
             
@@ -66,6 +67,8 @@ class FaceRecognizer:
                         try:
                             img = cv2.imread(img_path)
                             if img is None: continue
+                            # For loading known faces, we don't need to enforce detection or skip
+                            # as we are processing full images and want detection to happen.
                             emb = self.extract_embedding(img, enforce_detection=False)
                             if emb:
                                 person_embs.append(emb)
@@ -150,43 +153,37 @@ class FaceRecognizer:
         # Extract current embedding
         current_enc = self.extract_embedding(face_crop)
         if current_enc is None:
-            # If no actual face detected, return Unknown immediately
-            return default_res
+            log.warning(f"FaceRec: Track {track_id} - Could not extract embedding from face crop.")
+            return {"id": None, "name": "Unknown", "display_id": "Unrecognized"}
 
         # Find best match in memory
         best_id = None
         best_name = "Unknown"
         best_display_id = ""
         best_dist = float('inf')
-        second_best_dist = float('inf')
         
-        # We'll use a margin (e.g. 0.10) to ensure the match is distinct
+        # We'll use a margin (e.g. 0.05) to ensure the match is distinct
         # If the gap between top-1 and top-2 is too small, it's ambiguous.
-        CONFIDENCE_MARGIN = 0.10
+        CONFIDENCE_MARGIN = 0.05
 
         for identity in self._known_faces:
             dist = cosine(current_enc, identity["encoding"])
             if dist < best_dist:
-                second_best_dist = best_dist
                 best_dist = dist
                 best_id = identity.get("id")
                 best_name = identity["name"]
                 best_display_id = identity.get("display_id", "")
-            elif dist < second_best_dist:
-                second_best_dist = dist
         
+        log.info(f"FaceRec: Track {track_id} - Best Match: {best_name}, Distance: {best_dist:.4f} (Threshold: {self.threshold})")
+
         # Security Gate:
         # 1. Must be below static threshold (0.48)
-        # 2. Must be significantly better than the next best guess
-        # LOWERED to 0.04 to be more lenient while still preventing swaps
-        is_distinct = (second_best_dist - best_dist) > 0.04
-        
-        if best_dist < self.threshold and is_distinct:
+        # 2. Relaxed distinctness requirement (was 0.02)
+        if best_dist <= self.threshold:
             res = {"id": best_id, "name": best_name, "display_id": best_display_id}
-            log.info(f"FaceRec: Recognized {best_name} (dist={best_dist:.3f}, margin={second_best_dist-best_dist:.3f})")
+            log.info(f"FaceRec: Recognized {best_name} (dist={best_dist:.3f})")
         else:
-            if best_dist < self.threshold and not is_distinct:
-                log.warning(f"FaceRec: Match rejected due to low margin: {best_name} ({best_dist:.3f}) vs second ({second_best_dist:.3f})")
+            log.info(f"FaceRec: No match for Track {track_id} (best: {best_name} at {best_dist:.3f})")
             res = default_res
         self._cache[track_id] = res
         return res

@@ -233,7 +233,7 @@ async function loadMemberLogs() {
         } else {
             tbody.innerHTML = logs.map(log => {
                 const logJson = JSON.stringify(log).replace(/'/g, "&apos;");
-                const isStaff = log.person_type === 'STAFF';
+                const isStaff = log.person_type && log.person_type.toUpperCase() === 'STAFF';
                 
                 // Confidence Logic: use API value or simulate for 0 values
                 let confidence = log.confidence;
@@ -249,7 +249,7 @@ async function loadMemberLogs() {
                             <img src="${log.image_url}" class="thumb-frame" onclick="event.stopPropagation(); openImageOverlay('${log.image_url}', '${log.member_name}')">
                         </td>
                         <td><span style="font-family: 'JetBrains Mono'; font-weight: 600; color: var(--accent);">${log.display_id || '-'}</span></td>
-                        <td><strong style="color: var(--text-primary);">${log.member_name || 'Unidentified'}</strong></td>
+                        <td><strong style="color: var(--text-primary);">${log.member_name || 'Unknown'}</strong></td>
                         <td style="min-width: 140px; vertical-align: middle;">
                             <div style="display: flex; justify-content: space-between; font-size: 9px; font-weight: 800; color: var(--text-tertiary); margin-bottom: 2px;">
                                 <span>AI SCORE</span>

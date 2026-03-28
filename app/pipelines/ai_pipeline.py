@@ -88,38 +88,44 @@ class AIPipeline(threading.Thread):
         self.result_lock  = result_lock
         self._stop_evt    = threading.Event()
 
-        # ── Load all models ONCE ──────────────────────────────────────────────
-        log.info("AI pipeline: loading models …")
-
-        self.motion_det = MotionDetector(
-            history=cfg.MOTION_HISTORY,
-            var_threshold=cfg.MOTION_VAR_THRESHOLD,
-            min_area=cfg.MOTION_MIN_AREA,
-        )
-        self.person_det = PersonDetector(
-            model_path=cfg.YOLO_MODEL,
-            conf_threshold=cfg.YOLO_CONF,
-            device=cfg.YOLO_DEVICE,
-        )
-        # Global models (Shared across camera views)
+        # Global models (Stateless or shared across views)
         self.face_det = FaceDetector()
-        # ... (rest of models initialization)
-        self.emotion_det = EmotionDetector(
-            skip_frames=cfg.EMOTION_SKIP_FRAMES,
-            backend=cfg.EMOTION_BACKEND,
-            min_face_pixels=cfg.EMOTION_MIN_FACE_PX,
-        )
-        self.action_det = ActionDetector(
-            enabled=cfg.ENABLE_ACTION,
-            buffer_size=cfg.ACTION_BUFFER_SIZE,
-            slow_stride=cfg.ACTION_SLOW_STRIDE,
-            device=cfg.ACTION_DEVICE,
-        )
+        
+        # Per-camera models (Stored in a dict to keep track IDs and buffers stable)
+        self._person_detectors:  dict[str, PersonDetector]  = {}
+        self._motion_detectors:  dict[str, MotionDetector]  = {}
+        self._action_detectors:  dict[str, ActionDetector]  = {}
+        self._emotion_detectors: dict[str, EmotionDetector] = {}
+
+        self._detector_params = {
+            "model_path": cfg.YOLO_MODEL,
+            "conf_threshold": cfg.YOLO_CONF,
+            "device": cfg.YOLO_DEVICE,
+        }
+        self._motion_params = {
+            "history": cfg.MOTION_HISTORY,
+            "var_threshold": cfg.MOTION_VAR_THRESHOLD,
+            "min_area": cfg.MOTION_MIN_AREA,
+        }
+        self._action_params = {
+            "enabled": cfg.ENABLE_ACTION,
+            "buffer_size": cfg.ACTION_BUFFER_SIZE,
+            "slow_stride": cfg.ACTION_SLOW_STRIDE,
+            "device": cfg.ACTION_DEVICE,
+        }
+        self._emotion_params = {
+            "skip_frames": cfg.EMOTION_SKIP_FRAMES,
+            "backend": cfg.EMOTION_BACKEND,
+            "min_face_pixels": cfg.EMOTION_MIN_FACE_PX,
+        }
+
+        print(f"DEBUG: AIPipeline: Initializing with upload_folder={upload_folder}")
         self.face_rec = FaceRecognizer(
             db_path=upload_folder or cfg.__dict__.get("UPLOAD_FOLDER", "static/uploads"),
-            skip_frames=15,
-            backend=cfg.EMOTION_BACKEND,
+            model_name="Facenet512",
+            backend="opencv"
         )
+        self.face_rec.threshold = 0.42
 
         self.camera_name = "Camera"  # Safe default to avoid AttributeError
         self.camera_roles = []       # Active roles for current camera (entry, exit, general)
@@ -254,7 +260,12 @@ class AIPipeline(threading.Thread):
             
         def _task():
             try:
-                res = self.emotion_det.analyse(crop, tid)
+                # LOCAL LOOKUP: Detectors are stored per camera name
+                emotion_det = self._emotion_detectors.get(cam_name)
+                if not emotion_det:
+                    return "unknown"
+                
+                res = emotion_det.analyse(crop, tid)
                 state = self._get_state(cam_name)
                 if tid in state['track_data']:
                     state['track_data'][tid]["emotion"] = res
@@ -281,12 +292,13 @@ class AIPipeline(threading.Thread):
                 if not face_bbox:
                     face_bbox = self.face_det.detect_in_crop(ai_frame, bbox, threshold=0.3)
                 if face_bbox:
+                    log.info(f"DEBUG: AI: Face detected for Track {tid} at {face_bbox}")
                     fx1, fy1, fx2, fy2 = (int(v) for v in face_bbox)
                     face_crop = ai_frame[max(0,fy1):min(ai_frame.shape[0],fy2), max(0,fx1):min(ai_frame.shape[1],fx2)]
                     if face_crop.size > 0:
                         # PROACTIVE: Allow first attempt even if quality is just "okay"
-                        # We use 15.0 as a floor for complete garbage images
-                        if not self.face_det.is_high_quality(face_crop, min_sharpness=15.0):
+                        # We use 5.0 as a floor for complete garbage images
+                        if not self.face_det.is_high_quality(face_crop, min_sharpness=5.0):
                             log.debug(f"AI: Recognition skipped for Track {tid} - Image too poor")
                             return "Unknown"
 
@@ -302,9 +314,8 @@ class AIPipeline(threading.Thread):
                                 votes[name] = votes.get(name, 0) + 1
                                 td["id_votes"] = votes
                                 
-                                # IDENTITY OVERRIDE: If a name gets 2+ votes OR is high confidence, update it
-                                is_better = (votes.get(name, 0) > votes.get(td.get("identity"), 0))
-                                if votes[name] >= 2 or is_better:
+                                # IDENTITY OVERRIDE: If a name gets 3+ votes (to ensure stability), update it
+                                if votes[name] >= 3:
                                     old_id = td.get("identity", "Unknown")
                                     td["identity"] = name
                                     td["staff_db_id"] = res.get("id")
@@ -312,10 +323,17 @@ class AIPipeline(threading.Thread):
                                     td["recognized"] = True
 
                                     # UPDATE DATABASE (LATE SYNC)
-                                    if td.get("db_id") and (old_id != name):
+                                    if (old_id != name):
                                         from app.services.attendance_service import update_person_identity
-                                        log.info(f"AI: [AUTO-CORRECT] {old_id} -> {name} for Track {tid}")
-                                        update_person_identity(member_id=td["db_id"], staff_id=td["staff_db_id"], staff_name=name)
+                                        log.info(f"AI: [AUTO-CORRECT] {old_id} -> {name} for Track {tid} (Camera: {cam_name})")
+                                        # Use both member_id and track_id+cam_name for robustness against race conditions
+                                        update_person_identity(
+                                            member_id=td.get("db_id"), 
+                                            staff_id=td["staff_db_id"], 
+                                            staff_name=name,
+                                            track_id=tid,
+                                            movement_id=td.get("movement_id")
+                                        )
                                         
                                         # PARALLEL TELEGRAM: Notify upon successful identity match
                                         self.notifier.notify_person(tid, cam_name, identity=name, action=td.get("action", ""), image_path=td.get("entry_image_path"))
@@ -334,6 +352,19 @@ class AIPipeline(threading.Thread):
         motion = False
         mask = None
         track_results = []
+
+        # 1. Get or Create Per-Camera Detectors
+        if cam_name not in self._person_detectors:
+            log.info(f"AI: Initializing new Detectors for camera '{cam_name}'")
+            self._person_detectors[cam_name]  = PersonDetector(**self._detector_params)
+            self._motion_detectors[cam_name]  = MotionDetector(**self._motion_params)
+            self._action_detectors[cam_name]  = ActionDetector(**self._action_params)
+            self._emotion_detectors[cam_name] = EmotionDetector(**self._emotion_params)
+        
+        person_det  = self._person_detectors[cam_name]
+        motion_det  = self._motion_detectors[cam_name]
+        action_det  = self._action_detectors[cam_name]
+        emotion_det = self._emotion_detectors[cam_name]
 
         try:
             try:
@@ -362,12 +393,12 @@ class AIPipeline(threading.Thread):
                 log.info("AI: Processing frame #%d for %s", state['frame_idx'], cam_name)
 
             # --- 1. Movement stage ---
-            motion, mask = self.motion_det.detect(ai_frame)
+            motion, mask = motion_det.detect(ai_frame)
             if motion:
                 _total_motion_events += 1
             
             # --- 2. YOLO Detection & Tracking (Every Frame) ---
-            state['last_detections'] = self.person_det.track(ai_frame, persist=True)
+            state['last_detections'] = person_det.track(ai_frame, persist=True)
             yolo_any = len(state['last_detections']) > 0
             
             if yolo_any:
@@ -403,17 +434,17 @@ class AIPipeline(threading.Thread):
                     snapshot_label = "human"
                     if state['last_detections']:
                         # If any human is in the frame, prioritize 'human', otherwise use the class of the first detection
-                        has_human = any(d[6] == self.person_det.PERSON_CLASS_ID for d in state['last_detections'])
+                        has_human = any(d[6] == person_det.PERSON_CLASS_ID for d in state['last_detections'])
                         if not has_human:
                             first_cls = state['last_detections'][0][6]
-                            snapshot_label = "animal" if first_cls in self.person_det.ANIMAL_CLASS_IDS else "unknown"
+                            snapshot_label = "animal" if first_cls in person_det.ANIMAL_CLASS_IDS else "unknown"
                     
                     update_movement_classification(state['current_frame_motion_id'], snapshot_label, 1.0)
                 state['last_motion_time'] = now
 
             # 1.5) Object detection (Phone/Food) for rule-based actions
             if state['frame_idx'] % 10 == 0:
-                state['last_objects'] = self.person_det.detect_objects(ai_frame)
+                state['last_objects'] = person_det.detect_objects(ai_frame)
 
             # 2) Human detection/tracking (Already scanned in Watchdog logic above)
             pass
@@ -453,7 +484,7 @@ class AIPipeline(threading.Thread):
                         "db_id": None,          
                         "missing_count": 0,     # GRACE PERIOD
                         "is_accounted": False,  # Has it been counted in self.entries?
-                        "obj_type": "human" if track.cls_id == self.person_det.PERSON_CLASS_ID else "animal",
+                        "obj_type": "human" if track.cls_id == person_det.PERSON_CLASS_ID else "animal",
                         "start_time": now,
                         "best_clarity": -1.0,
                         "best_frame": None,
@@ -468,7 +499,7 @@ class AIPipeline(threading.Thread):
 
                 # RE-EVALUATE CLASSIFICATION (Improve robustness against initial frame flicker)
                 # If we see it's an animal in ANY of the first 15 frames, mark as animal
-                if td.get("track_frame_count", 0) < 15 and track.cls_id != self.person_det.PERSON_CLASS_ID:
+                if td.get("track_frame_count", 0) < 15 and track.cls_id != person_det.PERSON_CLASS_ID:
                     if td.get("obj_type") == "human":
                         log.info(f"AI: Re-classifying Track {tid} from human to animal (Confidence Update)")
                         td["obj_type"] = "animal"
@@ -515,6 +546,7 @@ class AIPipeline(threading.Thread):
                                 staff_id=td["staff_db_id"], 
                                 staff_name=new_id,
                                 track_id=tid,
+                                movement_id=td.get("movement_id"),
                                 image_path=f"static/uploads/movement/{sync_crop_filename}" if td.get("best_frame") is not None else None,
                                 confidence=td["best_clarity"]
                             )
@@ -605,8 +637,8 @@ class AIPipeline(threading.Thread):
                 # We log as soon as we have 1 stable frame to ensure the table is updated first
                 # ONLY log in Member Logs (log_person) if it's a HUMAN track
                 if not td["logged"] and len(td["frames"]) >= 1 and td["obj_type"] == "human":
-                    # STRICT CLARITY: User wants clear photos, but 30 is a safe floor for entry
-                    if td["best_clarity"] < 30:
+                    # INCLUSIVE LOGGING: Allow slightly lower clarity (10) to ensure everyone is captured
+                    if td["best_clarity"] < 10:
                         log.debug(f"AI: Skipping Entry log for Track {tid} - Low Clarity ({td['best_clarity']:.1f})")
                     else:
                         person_type = "staff" if current_id != "Unknown" else "unknown"
@@ -795,7 +827,7 @@ class AIPipeline(threading.Thread):
                     else:              geometry_label = "🧍 standing"
 
                     person_crop    = ai_frame[by1:by2, bx1:bx2]
-                    slowfast_label = self.action_det.update(tid, person_crop) if person_crop.size > 0 else ""
+                    slowfast_label = action_det.update(tid, person_crop) if person_crop.size > 0 else ""
 
                     def _overlaps(ob, pb, exp=40):
                         ox1, oy1, ox2, oy2 = ob
@@ -816,8 +848,8 @@ class AIPipeline(threading.Thread):
                     bx1, by1, bx2, by2 = (max(0, int(v)) for v in bbox)
                     bx2, by2 = min(ai_w, bx2), min(ai_h, by2)
                     person_crop = ai_frame[by1:by2, bx1:bx2]
-                    if person_crop.size > 0: self._submit_emotion(person_crop, tid, self.camera_name)
-                    emotion = self.emotion_det._cache.get(tid, "")
+                    if person_crop.size > 0: self._submit_emotion(person_crop, tid, cam_name)
+                    emotion = emotion_det._cache.get(tid, "")
 
                 if AI_TOGGLES.get("person", True):
                     cached_res = self.face_rec._cache.get(tid, {"name": "Unknown", "display_id": ""})
@@ -846,8 +878,10 @@ class AIPipeline(threading.Thread):
 
             # 5. Periodic cleanup of trackers & futures
             if state['frame_idx'] % 150 == 0:
-                self.emotion_det.purge(active_ids)
-                self.action_det.purge(active_ids)
+                # Per-camera purges
+                emotion_det.purge(active_ids)
+                action_det.purge(active_ids)
+                
                 self.face_rec.purge(active_ids)
                 for d in (self._emotion_futures, self._rec_futures):
                     for tid in list(d):

@@ -145,6 +145,7 @@ def update_person_identity(member_id: int, staff_id: int, staff_name: str, track
         cur = conn.cursor()
         
         # 1. Update Member Timestamp
+        effective_cam_id = None
         if member_id:
             log.info(f"DB: Updating member_timestamp #{member_id} to staff {staff_name} (ID: {staff_id})")
             cur.execute("""
@@ -157,12 +158,12 @@ def update_person_identity(member_id: int, staff_id: int, staff_name: str, track
             """, (staff_id, staff_name, image_path, confidence, member_id))
             row = cur.fetchone()
             
-            # TRIGGER ATTENDANCE TABLE (Crucial Fix: Ensure staff gets marked present even if recognized late)
             if row:
-                cam_id = row["camera_id"]
+                effective_cam_id = row["camera_id"]
                 effective_image = image_path or row["image_path"]
+                # TRIGGER ATTENDANCE TABLE
                 try:
-                    track_staff_attendance(staff_id, staff_name=staff_name, entry_image=effective_image, camera_name=cam_id)
+                    track_staff_attendance(staff_id, staff_name=staff_name, entry_image=effective_image, camera_name=effective_cam_id)
                 except Exception as ex:
                     log.warning(f"Failed to trigger attendance in update_person_identity: {ex}")
 
@@ -177,11 +178,19 @@ def update_person_identity(member_id: int, staff_id: int, staff_name: str, track
 
         if track_id:
             # Update ALL member logs for this track today (Safety)
-            cur.execute("""
-                UPDATE member_timestamp 
-                SET person_type = 'staff', staff_id = %s, staff_name = %s
-                WHERE track_id = %s AND detected_at::date = CURRENT_DATE
-            """, (staff_id, staff_name, track_id))
+            # CRITICAL: Must filter by camera_id if provided to avoid collisions with other cameras using same track ID
+            if effective_cam_id:
+                cur.execute("""
+                    UPDATE member_timestamp 
+                    SET person_type = 'staff', staff_id = %s, staff_name = %s
+                    WHERE track_id = %s AND camera_id = %s AND detected_at::date = CURRENT_DATE
+                """, (staff_id, staff_name, track_id, effective_cam_id))
+            else:
+                cur.execute("""
+                    UPDATE member_timestamp 
+                    SET person_type = 'staff', staff_id = %s, staff_name = %s
+                    WHERE track_id = %s AND detected_at::date = CURRENT_DATE
+                """, (staff_id, staff_name, track_id))
 
         # 2. Update Movement Logs
         if movement_id:
@@ -193,11 +202,18 @@ def update_person_identity(member_id: int, staff_id: int, staff_name: str, track
             
         if track_id:
             # Update ALL movement logs for this track today
-            cur.execute("""
-                UPDATE movement_log 
-                SET person_type = 'staff', staff_id = %s, staff_name = %s
-                WHERE track_id = %s AND detected_at::date = CURRENT_DATE
-            """, (staff_id, staff_name, track_id))
+            if effective_cam_id:
+                cur.execute("""
+                    UPDATE movement_log 
+                    SET person_type = 'staff', staff_id = %s, staff_name = %s
+                    WHERE track_id = %s AND camera_id = %s AND detected_at::date = CURRENT_DATE
+                """, (staff_id, staff_name, track_id, effective_cam_id))
+            else:
+                cur.execute("""
+                    UPDATE movement_log 
+                    SET person_type = 'staff', staff_id = %s, staff_name = %s
+                    WHERE track_id = %s AND detected_at::date = CURRENT_DATE
+                """, (staff_id, staff_name, track_id))
 
         conn.commit()
     except Exception as e:
