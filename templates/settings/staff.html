@@ -1,12 +1,8 @@
 {% extends "base.html" %}
 {% set active_page = 'members' %}
-{% set sub_page = 'members' %}
 
 {% block content %}
-<div id="view-settings-staff"
-  style="height: calc(100vh - 53px); overflow-y: auto; background: var(--bg); padding: 28px;">
-  <div
-    style="background: var(--surface); border-radius: 14px; border: 1px solid var(--border); box-shadow: var(--shadow-sm); padding: 32px 40px; min-height: calc(100vh - 53px - 56px);">
+<div id="view-settings-staff" class="fade-in">
 
     <!-- Staff Directory List -->
     <div id="mod-upload" class="s-mod-page active">
@@ -114,32 +110,18 @@
       <div id="saved-staff-gallery" class="staff-gallery view-container"></div>
 
       <div id="saved-staff-list" class="view-container" style="display:none; margin-top:20px;">
-        <div class="saas-card" style="padding:0; overflow:hidden; border-radius:12px;">
+        <div class="saas-card" style="padding:0; overflow:hidden;">
           <div style="overflow-x: auto;">
-            <table style="width:100%; border-collapse:collapse; min-width: 1050px;">
-              <thead style="background: var(--surface2); text-align:left;">
+            <table class="saas-table" style="min-width: 1050px;">
+              <thead>
                 <tr>
-                  <th
-                    style="padding:16px 20px; font-size:12px; font-weight:700; color: var(--text-secondary); text-transform:uppercase; letter-spacing:0.05em; width: 220px;">
-                    Member</th>
-                  <th
-                    style="padding:16px 20px; font-size:12px; font-weight:700; color: var(--text-secondary); text-transform:uppercase; letter-spacing:0.05em; width: 120px;">
-                    Staff ID</th>
-                  <th
-                    style="padding:16px 20px; font-size:12px; font-weight:700; color: var(--text-secondary); text-transform:uppercase; letter-spacing:0.05em; width: 150px;">
-                    Phone</th>
-                  <th
-                    style="padding:16px 20px; font-size:12px; font-weight:700; color: var(--text-secondary); text-transform:uppercase; letter-spacing:0.05em; width: 250px;">
-                    Email</th>
-                  <th
-                    style="padding:16px 20px; font-size:12px; font-weight:700; color: var(--text-secondary); text-transform:uppercase; letter-spacing:0.05em; width: 200px;">
-                    Address</th>
-                  <th
-                    style="padding:16px 20px; font-size:12px; font-weight:700; color: var(--text-secondary); text-transform:uppercase; letter-spacing:0.05em; width: 150px;">
-                    Status</th>
-                  <th
-                    style="padding:16px 20px; font-size:12px; font-weight:700; color: var(--text-secondary); text-transform:uppercase; text-align:right; width: 60px;">
-                  </th>
+                  <th style="width: 260px;">MEMBER</th>
+                  <th>STAFF ID</th>
+                  <th>PHONE</th>
+                  <th>EMAIL</th>
+                  <th>ADDRESS</th>
+                  <th>STATUS</th>
+                  <th style="width: 60px;"></th>
                 </tr>
               </thead>
               <tbody id="staff-table-body"></tbody>
@@ -250,7 +232,6 @@
         </div>
       </div>
 
-    </div>
   </div>
 
   <!-- Import Modal -->
@@ -373,11 +354,11 @@
     .s-mod-page {
       display: none;
       background: var(--bg-surface);
-      padding: 40px;
-      border-radius: 20px;
-      border: 1px solid rgba(124, 58, 237, 0.12);
-      box-shadow: 0 24px 80px rgba(0, 0, 0, 0.45), 0 0 40px rgba(124, 58, 237, 0.06);
-      margin-top: 20px;
+      padding: var(--s-6);
+      border-radius: var(--radius-lg);
+      border: 1px solid var(--border-main);
+      box-shadow: var(--shadow-md);
+      margin-top: 0;
       animation: slideUp 0.4s cubic-bezier(0.16, 1, 0.3, 1);
     }
 
@@ -899,48 +880,19 @@
       border-color: rgba(124, 58, 237, 0.3);
     }
 
-    .saas-table {
-      width: 100%;
-      border-collapse: collapse;
-      border: 1px solid rgba(255, 255, 255, 0.15);
-    }
-
-    .saas-table th {
-      padding: 14px 20px;
-      font-size: 11px;
-      font-weight: 800;
-      color: var(--text-tertiary);
-      text-transform: uppercase;
-      letter-spacing: 0.1em;
-      border-bottom: 2px solid rgba(255, 255, 255, 0.2);
-      border-right: 1px solid rgba(255, 255, 255, 0.15);
-      background: var(--bg-surface-alt);
-    }
-
-    .saas-table th:last-child {
-      border-right: none;
-    }
-
-    .saas-table td {
-      padding: 12px 20px;
-      border-bottom: 1px solid rgba(255, 255, 255, 0.12);
-      border-right: 1px solid rgba(255, 255, 255, 0.12);
-      transition: all 0.2s;
-    }
-
-    .saas-table td:last-child {
-      border-right: none;
-    }
-
-    .saas-table tr:hover td {
-      background: rgba(124, 58, 237, 0.04);
-      border-bottom-color: rgba(124, 58, 237, 0.2);
-    }
-
     .member-summary-value {
       font-family: 'Plus Jakarta Sans', sans-serif;
       font-weight: 800;
       color: var(--text-primary);
+    }
+
+    /* Standard Table Row Lines */
+    .saas-table td {
+      border-bottom: 1px solid var(--border-main) !important;
+    }
+
+    .saas-table tr:hover td {
+      background: rgba(255, 255, 255, 0.03) !important;
     }
   </style>
 
@@ -1395,7 +1347,7 @@
 
         return `
       <tr class="staff-table-row" onclick="openStaffEdit('${escapedName}', ${staffId})" style="cursor:pointer;">
-        <td style="padding:12px 20px;">
+        <td>
           <div style="display:flex; align-items:center; gap:16px;">
             <div style="width:44px; height:44px; border-radius:50%; overflow:hidden; border:2px solid ${statusColor}; padding:2px; background:var(--bg-input); flex-shrink:0;">
               <img src="${p.thumbnail || '/static/img/default-avatar.png'}" 
@@ -1408,28 +1360,28 @@
             </div>
           </div>
         </td>
-        <td style="padding:12px 20px;">
+        <td>
            <span style="font-family:'JetBrains Mono'; font-weight:700; color:var(--accent); font-size:12px;">${p.staff_id || 'STF-PENDING'}</span>
         </td>
-        <td style="padding:12px 20px;">
+        <td>
           <input type="text" class="inline-input" value="${p.phone || ''}" placeholder="+"
                  onclick="event.stopPropagation()"
                  style="font-size:13px; font-weight:600; color:var(--text-secondary); border:none; background:transparent; width:100%;"
                  oninput="this.classList.add('saving'); clearTimeout(this.timeout); this.timeout = setTimeout(() => updateMemberInline('${escapedName}', 'phone', this.value, this), 800)">
         </td>
-        <td style="padding:12px 20px;">
+        <td>
           <input type="text" class="inline-input" value="${p.email || ''}" placeholder="..."
                  onclick="event.stopPropagation()"
                  style="font-size:13px; font-weight:600; color:var(--text-secondary); border:none; background:transparent; width:100%;"
                  oninput="this.classList.add('saving'); clearTimeout(this.timeout); this.timeout = setTimeout(() => updateMemberInline('${escapedName}', 'email', this.value, this), 800)">
         </td>
-        <td style="padding:12px 20px;">
+        <td>
           <input type="text" class="inline-input" value="${p.address || ''}" placeholder="..."
                  onclick="event.stopPropagation()"
                  style="font-size:13px; font-weight:600; color:var(--text-secondary); border:none; background:transparent; width:100%;"
                  oninput="this.classList.add('saving'); clearTimeout(this.timeout); this.timeout = setTimeout(() => updateMemberInline('${escapedName}', 'address', this.value, this), 800)">
         </td>
-        <td style="padding:12px 20px;">
+        <td>
           <div style="display:flex; align-items:center; gap:12px;">
             <label class="switch" onclick="event.stopPropagation()">
               <input type="checkbox" ${p.status === 'active' ? 'checked' : ''} onchange="toggleStaffStatus('${escapedName}', this.checked)">
@@ -1438,7 +1390,7 @@
             <span class="status-badge ${p.status === 'active' ? 'status-success' : 'status-error'}" style="font-size:10px; font-weight:800; padding:2px 8px;">${p.status.toUpperCase()}</span>
           </div>
         </td>
-        <td style="padding:12px 20px; text-align:right;">
+        <td style="text-align:right;">
           <div style="display:flex; align-items:center; justify-content:flex-end; gap:10px;">
             <button class="icon-btn" style="color:var(--accent);" onclick="event.stopPropagation(); openStaffEdit('${escapedName}', ${staffId})"><i data-lucide="eye" style="width:16px;"></i></button>
             <button class="icon-btn" style="color:var(--error);" onclick="event.stopPropagation(); deleteStaffProfileByName('${escapedName}')"><i data-lucide="trash-2" style="width:16px;"></i></button>
