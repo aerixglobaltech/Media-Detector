@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Media Detector | AI Powered Surveillance</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Playfair+Display:ital,wght@0,700;1,700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/landing.css') }}">
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+</head>
+<body>
+    <div class="bg-blob blob-1"></div>
+    <div class="bg-blob blob-2"></div>
+
+    <nav class="navbar">
+        <div class="logo">
+            <i data-lucide="shield-check" style="width: 32px; height: 32px; color: var(--accent);"></i>
+            MEDIA DETECTOR
+        </div>
+        <ul class="nav-links">
+            <li><a href="#features">Features</a></li>
+            <li><a href="#how-it-works">Technology</a></li>
+            <li><a href="/login" style="color: var(--text-white);">Login</a></li>
+        </ul>
+        <a href="/signup" class="nav-cta">Sign Up</a>
+    </nav>
+
+    <header class="hero">
+        <div class="hero-content">
+            <div class="badge">AI-POWERED THREAT DETECTION <span class="new-tag">New</span></div>
+            <h1 class="serif-heading">Surveillance. <span class="italic-accent">Never</span> looked so intelligent.</h1>
+            <p>Monitor every angle with state-of-the-art AI. No spreadsheets. No missed alerts. Just intelligent vision that protects your business 24/7.</p>
+            <div style="display: flex; gap: 1.5rem; justify-content: flex-start; align-items: center; margin-top: 1rem;">
+                <a href="/signup" class="nav-cta" style="padding: 1rem 2.5rem; font-size: 1rem;">Get Started Free</a>
+                <a href="/login" class="login-secondary">
+                    <i data-lucide="log-in" style="width: 18px;"></i> Existing Login
+                </a>
+            </div>
+        </div>
+        <div class="hero-visual">
+            <img src="{{ url_for('static', filename='images/hero_visual.png') }}" alt="AI Security Dashboard">
+        </div>
+    </header>
+
+    <section class="how-it-works" id="how-it-works">
+        <div class="section-header">
+            <h2 class="serif-heading" style="font-size: 3rem;">How it <span class="italic-accent">Works</span></h2>
+            <p>The simplest way to manage enterprise surveillance.</p>
+        </div>
+        <div class="steps-grid">
+            <div class="step-card">
+                <div class="step-num">01</div>
+                <h3>Connect</h3>
+                <p>Automatically detect and link your ONVIF and RTSP camera feeds in seconds. No complex network configuration required.</p>
+            </div>
+            <div class="step-card">
+                <div class="step-num">02</div>
+                <h3>Detect</h3>
+                <p>Deploy specialized AI models for face recognition, weapon detection, and intrusion tracking with one click.</p>
+            </div>
+            <div class="step-card">
+                <div class="step-num">03</div>
+                <h3>Secure</h3>
+                <p>Receive mission-critical alerts via Telegram, SMS, or Push the moment a security event is triggered.</p>
+            </div>
+        </div>
+    </section>
+
+    <section class="features" id="features">
+        <div class="section-header">
+            <h2 style="font-weight: 800;">Powerful AI capabilities</h2>
+            <p>Experience the most advanced surveillance features in one unified platform.</p>
+        </div>
+        <div class="features-grid">
+            <div class="feature-card">
+                <div class="feature-icon"><i data-lucide="eye"></i></div>
+                <h3>Smart Presence</h3>
+                <p>Detect and track objects in real-time with 99.9% accuracy. Distinguish between people, vehicles, and pets instantly.</p>
+            </div>
+            <div class="feature-card">
+                <div class="feature-icon"><i data-lucide="scan-face"></i></div>
+                <h3>Face Analytics</h3>
+                <p>Advanced facial recognition to identify authorized personnel and flag unauthorized entry attempts automatically.</p>
+            </div>
+            <div class="feature-card">
+                <div class="feature-icon"><i data-lucide="bell"></i></div>
+                <h3>Instant Alerts</h3>
+                <p>Receive immediate notifications via Telegram or SMS the moment a security event is triggered by our AI engine.</p>
+            </div>
+            <div class="feature-card">
+                <div class="feature-icon"><i data-lucide="bar-chart-3"></i></div>
+                <h3>Deep Insights</h3>
+                <p>Analyze patterns and trends with comprehensive security reports and Heatmaps of activity within your premises.</p>
+            </div>
+            <div class="feature-card">
+                <div class="feature-icon"><i data-lucide="cloud-upload"></i></div>
+                <h3>Cloud Sync</h3>
+                <p>Your data is securely archived and accessible from anywhere in the world. Fully encrypted and tamper-proof storage.</p>
+            </div>
+            <div class="feature-card">
+                <div class="feature-icon"><i data-lucide="zap"></i></div>
+                <h3>Fast Processing</h3>
+                <p>Optimized algorithms that run smoothly on your hardware while providing lightning-fast detection speeds.</p>
+            </div>
+        </div>
+    </section>
+
+    <section class="cta-section">
+        <div class="cta-box">
+            <h2 style="font-weight: 800;">Ready to secure your world?</h2>
+            <p style="font-size: 1.2rem; color: var(--text-muted); max-width: 700px; margin: 0 auto;">Join the hundreds of organizations trusting Media Detector for their mission-critical surveillance needs.</p>
+            <a href="/signup" class="btn-primary">Create Your Account</a>
+        </div>
+    </section>
+
+    <footer>
+        <p>&copy; 2026 Media Detector AI. All rights reserved.</p>
+        <div style="display: flex; gap: 2rem;">
+            <a href="#" style="color: inherit; text-decoration: none;">Privacy Policy</a>
+            <a href="#" style="color: inherit; text-decoration: none;">Terms of Service</a>
+        </div>
+    </footer>
+
+    <script>
+        lucide.createIcons();
+
+        // Smooth scroll for anchors
+        document.querySelectorAll('a[href^="#"]').forEach(anchor => {
+            anchor.addEventListener('click', function (e) {
+                e.preventDefault();
+                document.querySelector(this.getAttribute('href')).scrollIntoView({
+                    behavior: 'smooth'
+                });
+            });
+        });
+
+        // Navbar scroll effect
+        window.addEventListener('scroll', () => {
+            const nav = document.querySelector('.navbar');
+            if (window.scrollY > 50) {
+                nav.style.background = 'rgba(2, 6, 23, 0.9)';
+                nav.style.padding = '1rem 10%';
+            } else {
+                nav.style.background = 'transparent';
+                nav.style.padding = '1.5rem 10%';
+            }
+        });
+    </script>
+</body>
+</html>

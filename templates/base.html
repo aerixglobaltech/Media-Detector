@@ -79,7 +79,7 @@
         <nav class="sidebar-nav">
           {% set perms = user_permissions|default({}) %}
 
-          <a href="/" class="nav-link {{ 'active' if active_page == 'dashboard' else '' }}">
+          <a href="/dashboard" class="nav-link {{ 'active' if active_page == 'dashboard' else '' }}">
             <i data-lucide="layout-dashboard"></i>
             <span>Dashboard</span>
           </a>
@@ -192,7 +192,7 @@
       <div class="page-body">
         <!-- Optional Breadcrumbs can be added here -->
         <div class="saas-breadcrumbs" id="breadcrumbs">
-          <a href="/" class="breadcrumb-item">
+          <a href="/dashboard" class="breadcrumb-item">
             <i data-lucide="home" style="width: 14px;"></i>
             <span>Home</span>
           </a>

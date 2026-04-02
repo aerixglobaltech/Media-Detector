@@ -11,7 +11,7 @@ Routes:
 
 from __future__ import annotations
 
-from flask import Blueprint, render_template
+from flask import Blueprint, render_template, session, redirect, url_for
 
 from app.core.security import login_required
 
@@ -19,10 +19,17 @@ dashboard_bp = Blueprint("dashboard", __name__)
 
 
 @dashboard_bp.route("/")
+def landing():
+    """Landing/Splash page for unauthenticated users."""
+    if "user" in session:
+        return redirect(url_for("dashboard.index"))
+    return render_template("landing.html")
+
+
+@dashboard_bp.route("/dashboard")
 @login_required
 def index():
     from app.api.routes.camera import get_all_cameras
-    from flask import session
     user_email = session.get("user")
     cameras = get_all_cameras(user_email=user_email)
     return render_template("dashboard.html", cameras=cameras)
